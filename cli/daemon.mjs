@@ -22,9 +22,7 @@ var DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
 var DEFAULT_CHAIN = process.env.TENEO_DEFAULT_CHAIN || "base";
 var DAEMON_PORT = parseInt(process.env.TENEO_DAEMON_PORT || "19876");
 var IDLE_TIMEOUT_MS = 10 * 60 * 1e3;
-var currentTxSigningMode = "auto";
 var connectingPromise = null;
-var pendingTxQueue = /* @__PURE__ */ new Map();
 var CHAIN_TO_CAIP2 = {
   base: "eip155:8453",
   peaq: "eip155:3338",
@@ -231,19 +229,6 @@ function registerTxSigner(sdkInstance) {
     const { taskId, tx, agentName, description, room } = data;
     const isOptional = data.optional === true;
     log(`TX requested by ${agentName || "agent"}: ${description || "on-chain transaction"}`);
-    if (currentTxSigningMode === "manual") {
-      log(`TX queued for manual approval (taskId: ${taskId})`);
-      pendingTxQueue.set(taskId, {
-        taskId,
-        tx,
-        description: description || "Transaction requested by agent",
-        agentName: agentName || "agent",
-        optional: isOptional,
-        room,
-        receivedAt: (/* @__PURE__ */ new Date()).toISOString()
-      });
-      return;
-    }
     try {
       await signBroadcastAndConfirm(sdkInstance, account, taskId, tx, room);
     } catch (err) {
@@ -577,8 +562,7 @@ var handlers = {
   },
   // Agent commands (with autosummon — uses sendMessage like the orchestrator)
   // Supports multi-step TX flows: agent sends approval TX, we sign it, agent sends swap TX, we sign it, agent sends final result.
-  "command": async (s, { agent, cmd, room, chain, timeout, autoSignTx }) => {
-    currentTxSigningMode = autoSignTx === false ? "manual" : "auto";
+  "command": async (s, { agent, cmd, room, chain, timeout }) => {
     try {
       const roomAgents = await s.listRoomAgents(room);
       const agentInRoom = roomAgents.some((a) => a.agent_id === agent);
@@ -868,43 +852,6 @@ var handlers = {
     const resolvedChain = CHAIN_TO_CAIP2[chain || DEFAULT_CHAIN] || chain || CHAIN_TO_CAIP2[DEFAULT_CHAIN];
     const q = await s.requestQuote(message, room, resolvedChain);
     return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };
-  },
-  // TX approval flow (for --no-auto-sign-tx mode)
-  "pending-txs": async () => {
-    const txs = Array.from(pendingTxQueue.values()).map((tx) => ({
-      taskId: tx.taskId,
-      description: tx.description,
-      agentName: tx.agentName,
-      to: tx.tx.to,
-      value: tx.tx.value || "0",
-      chainId: tx.tx.chainId,
-      data: tx.tx.data ? tx.tx.data.slice(0, 42) + "..." : "none",
-      optional: tx.optional,
-      receivedAt: tx.receivedAt
-    }));
-    return { count: txs.length, transactions: txs };
-  },
-  "approve-tx": async (s, { taskId }) => {
-    const pending = pendingTxQueue.get(taskId);
-    if (!pending) return { error: "not_found", taskId, message: "No pending transaction with this taskId. Run pending-txs to see queued transactions." };
-    pendingTxQueue.delete(taskId);
-    const key = requireKey();
-    const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
-    try {
-      const result = await signBroadcastAndConfirm(s, account, pending.taskId, pending.tx, pending.room);
-      return { status: "approved", ...result };
-    } catch (err) {
-      log(`Approve-tx failed: ${err.message}`);
-      await s.sendTxResult(pending.taskId, "failed", void 0, err.message, pending.room, pending.tx.chainId);
-      return { status: "failed", taskId, error: err.message };
-    }
-  },
-  "reject-tx": async (s, { taskId }) => {
-    const pending = pendingTxQueue.get(taskId);
-    if (!pending) return { error: "not_found", taskId, message: "No pending transaction with this taskId. Run pending-txs to see queued transactions." };
-    pendingTxQueue.delete(taskId);
-    await s.sendTxResult(pending.taskId, "rejected", void 0, "User rejected transaction", pending.room, pending.tx.chainId);
-    return { status: "rejected", taskId };
   },
   // Payment utilities
   "check-balance": async (s, { chain }) => {

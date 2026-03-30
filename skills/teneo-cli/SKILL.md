@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.9
+version: 2.0.10
 description: "Teneo CLI — query 400+ AI agents on the Teneo Protocol network from the terminal. Discover agents, manage rooms, handle x402 USDC micropayments, sign or review on-chain transactions, and auto-generate encrypted wallets. Background daemon keeps a persistent WebSocket connection. Use when the user needs real-time data (social media profiles, hotel search, crypto prices, gas fees, Amazon products, news) or multi-agent workflows."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -19,7 +19,7 @@ This is a **CLI tool** (TypeScript/Node.js) for querying agents from the termina
 2. **Query** agents directly — free agents auto-confirm, paid agents auto-pay via USDC
 3. **Manage rooms** — create rooms, add/remove agents (max 5 per room)
 4. **Handle payments** — automatic USDC on Base, Peaq, Avalanche, or X Layer with auto-retry across chains
-5. **Sign transactions** — auto-sign on-chain requests from agents (swaps, transfers), or review and approve manually
+5. **Sign transactions** — auto-sign all on-chain requests from agents (swaps, transfers, approvals)
 6. **Manage wallets** — encrypted wallet storage, balance checks, withdrawals
 
 **Use this skill when** you need real-time data from a Teneo agent — social media (X/Twitter, Instagram, TikTok, LinkedIn), hotel search, crypto prices, gas fees, Amazon products, news, and more.
@@ -232,7 +232,7 @@ Teneo organizes agents into **rooms**. You MUST understand these rules:
 <!-- COMMAND_REFERENCE -->
 ## Command Reference
 
-32 commands across agent discovery, execution, room management, and wallet operations. All commands return JSON to stdout.
+29 commands across agent discovery, execution, room management, and wallet operations. All commands return JSON to stdout.
 
 ```
 AGENT DISCOVERY
@@ -268,11 +268,6 @@ WALLET MANAGEMENT
   ~/teneo-skill/teneo wallet-send <amount> <to> <chain> Send USDC to any address
   ~/teneo-skill/teneo check-balance                  Check USDC balances across all payment networks (via daemon)
   ~/teneo-skill/teneo export-login                   Print export TENEO_PRIVATE_KEY=... for shell reuse
-
-TRANSACTION APPROVAL
-  ~/teneo-skill/teneo pending-txs                    List pending transactions waiting for approval (when using --no-auto-sign-tx)
-  ~/teneo-skill/teneo approve-tx <taskId>            Approve and sign a pending transaction
-  ~/teneo-skill/teneo reject-tx <taskId>             Reject a pending transaction
 
 DAEMON & UPDATES
   ~/teneo-skill/teneo daemon <action>                Manage the background daemon (start | stop | status)
@@ -332,7 +327,7 @@ Show agent details, commands, and pricing
 Direct command to agent (use internal agent ID, not display name)
 
 ```bash
-~/teneo-skill/teneo command <agent> <cmd> [--room <roomId>] [--timeout <ms>] [--chain <chain>] [--network <network>] [--no-auto-sign-tx]
+~/teneo-skill/teneo command <agent> <cmd> [--room <roomId>] [--timeout <ms>] [--chain <chain>] [--network <network>]
 ```
 
 | Argument | Required | Description |
@@ -346,7 +341,6 @@ Direct command to agent (use internal agent ID, not display name)
 | `--timeout <ms>` | Response timeout | 120000 |
 | `--chain <chain>` | Payment chain (base|avax|peaq|xlayer) | - |
 | `--network <network>` | Payment network (alias for --chain) | - |
-| `--no-auto-sign-tx` | Don't auto-sign on-chain transactions. TX details are shown and queued for approve-tx/reject-tx. | - |
 
 #### `quote`
 
@@ -595,40 +589,6 @@ Print export TENEO_PRIVATE_KEY=... for shell reuse
 ~/teneo-skill/teneo export-login
 ```
 
-### Transaction Approval
-
-#### `pending-txs`
-
-List pending transactions waiting for approval (when using --no-auto-sign-tx)
-
-```bash
-~/teneo-skill/teneo pending-txs
-```
-
-#### `approve-tx`
-
-Approve and sign a pending transaction
-
-```bash
-~/teneo-skill/teneo approve-tx <taskId>
-```
-
-| Argument | Required | Description |
-|----------|:--------:|-------------|
-| `taskId` | Yes | Task ID from pending-txs |
-
-#### `reject-tx`
-
-Reject a pending transaction
-
-```bash
-~/teneo-skill/teneo reject-tx <taskId>
-```
-
-| Argument | Required | Description |
-|----------|:--------:|-------------|
-| `taskId` | Yes | Task ID from pending-txs |
-
 ### Daemon & Updates
 
 #### `daemon`
@@ -731,31 +691,7 @@ By default, transactions are **signed, broadcast, and confirmed automatically**:
 5. CLI sends `confirmed` (or `failed` if reverted) to agent
 6. For multi-step flows (e.g. approval -> swap), the agent sends the next transaction and the cycle repeats
 
-### Manual approval mode (`--no-auto-sign-tx`)
-
-If you want to review transactions before signing:
-
-```bash
-~/teneo-skill/teneo command "squid-router" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
-```
-
-When a transaction is requested:
-- The CLI **queues** it instead of signing
-- The transaction details are returned in the response (to, value, chainId, data, description)
-- You can then approve or reject:
-
-```bash
-# See what's waiting
-~/teneo-skill/teneo pending-txs
-
-# Approve a specific transaction
-~/teneo-skill/teneo approve-tx <taskId>
-
-# Reject a specific transaction
-~/teneo-skill/teneo reject-tx <taskId>
-```
-
-This is useful when an AI agent is executing commands on your behalf and you want to review on-chain actions before they happen.
+**All transactions are auto-signed.** No manual approval is needed — the CLI handles payment signing, on-chain transaction signing, and multi-step flows (approvals, swaps, bridges) automatically.
 
 ---
 
@@ -899,17 +835,7 @@ Search agent descriptions and command triggers semantically. Check pricing to in
 ~/teneo-skill/teneo command "<agentId>" "<trigger> <argument>"
 ```
 
-Room is auto-resolved. Agent is auto-added if not in room. Payment is auto-signed. Payment network auto-retries if funds are insufficient on the default chain.
-
-**All transactions (payments AND on-chain swaps/bridges) are auto-signed by default. Do NOT use `approve-tx` or `pending-txs` unless the user explicitly passed `--no-auto-sign-tx`.** The normal flow requires no manual approval — just run the command and wait for the result.
-
-Only if the user explicitly asks to review transactions before signing, use `--no-auto-sign-tx`:
-
-```bash
-~/teneo-skill/teneo command "squid-router" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
-```
-
-Then show the pending TX details to the user and run `approve-tx <taskId>` or `reject-tx <taskId>`.
+Room is auto-resolved. Agent is auto-added if not in room. Payment is auto-signed. All on-chain transactions (swaps, bridges) are auto-signed. Payment network auto-retries if funds are insufficient on the default chain. No manual approval is ever needed.
 
 **This command may take 10-30 seconds for paid agent queries. Wait for the complete response. Do not summarize or present results to the user until the command has exited and you have the full JSON output.**
 

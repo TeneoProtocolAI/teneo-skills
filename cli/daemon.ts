@@ -38,24 +38,8 @@ const DAEMON_PORT = parseInt(process.env.TENEO_DAEMON_PORT || "19876");
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const TX_FOLLOWUP_TIMEOUT_MS = 60_000; // wait up to 60s for follow-up trigger_wallet_tx after a confirmed TX
 
-// Per-request TX signing mode — set by /exec before each command, checked by registerTxSigner.
-// "auto" = sign immediately (default), "manual" = show TX details, queue for approve-tx/reject-tx.
-let currentTxSigningMode: "auto" | "manual" = "auto";
-
 // Tracks the in-flight startup connection so /health can wait for it
 let connectingPromise: Promise<void> | null = null;
-
-// Pending TX queue for manual signing mode — keyed by taskId
-interface PendingTx {
-  taskId: string;
-  tx: any;
-  description: string;
-  agentName: string;
-  optional: boolean;
-  room: string | undefined;
-  receivedAt: string;
-}
-const pendingTxQueue = new Map<string, PendingTx>();
 
 // x402 payment network mapping
 const CHAIN_TO_CAIP2: Record<string, string> = {
@@ -313,22 +297,7 @@ function registerTxSigner(sdkInstance: TeneoSDK) {
     const isOptional = data.optional === true;
     log(`TX requested by ${agentName || "agent"}: ${description || "on-chain transaction"}`);
 
-    // Manual mode — queue for approval, don't send anything to agent yet
-    if (currentTxSigningMode === "manual") {
-      log(`TX queued for manual approval (taskId: ${taskId})`);
-      pendingTxQueue.set(taskId, {
-        taskId, tx,
-        description: description || "Transaction requested by agent",
-        agentName: agentName || "agent",
-        optional: isOptional,
-        room,
-        receivedAt: new Date().toISOString(),
-      });
-      // Don't call sendTxResult — agent waits until approve-tx or reject-tx
-      return;
-    }
-
-    // Auto mode — sign, broadcast, wait for receipt, confirm
+    // Auto-sign — sign, broadcast, wait for receipt, confirm
     try {
       await signBroadcastAndConfirm(sdkInstance, account, taskId, tx, room);
     } catch (err: any) {
@@ -697,10 +666,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
   // Agent commands (with autosummon — uses sendMessage like the orchestrator)
   // Supports multi-step TX flows: agent sends approval TX, we sign it, agent sends swap TX, we sign it, agent sends final result.
-  "command": async (s, { agent, cmd, room, chain, timeout, autoSignTx }) => {
-    // Set TX signing mode for this request
-    currentTxSigningMode = autoSignTx === false ? "manual" : "auto";
-
+  "command": async (s, { agent, cmd, room, chain, timeout }) => {
     // Autosummon: check if agent is in room, try existing rooms first, create new as last resort
     try {
       const roomAgents = await s.listRoomAgents(room);
@@ -1088,48 +1054,6 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
     const resolvedChain = CHAIN_TO_CAIP2[chain || DEFAULT_CHAIN] || chain || CHAIN_TO_CAIP2[DEFAULT_CHAIN];
     const q = await (s as any).requestQuote(message, room, resolvedChain);
     return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };
-  },
-
-  // TX approval flow (for --no-auto-sign-tx mode)
-  "pending-txs": async () => {
-    const txs = Array.from(pendingTxQueue.values()).map(tx => ({
-      taskId: tx.taskId,
-      description: tx.description,
-      agentName: tx.agentName,
-      to: tx.tx.to,
-      value: tx.tx.value || "0",
-      chainId: tx.tx.chainId,
-      data: tx.tx.data ? tx.tx.data.slice(0, 42) + "..." : "none",
-      optional: tx.optional,
-      receivedAt: tx.receivedAt,
-    }));
-    return { count: txs.length, transactions: txs };
-  },
-
-  "approve-tx": async (s, { taskId }) => {
-    const pending = pendingTxQueue.get(taskId);
-    if (!pending) return { error: "not_found", taskId, message: "No pending transaction with this taskId. Run pending-txs to see queued transactions." };
-    pendingTxQueue.delete(taskId);
-
-    const key = requireKey();
-    const account = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`);
-    try {
-      const result = await signBroadcastAndConfirm(s, account, pending.taskId, pending.tx, pending.room);
-      return { status: "approved", ...result };
-    } catch (err: any) {
-      log(`Approve-tx failed: ${err.message}`);
-      await (s as any).sendTxResult(pending.taskId, "failed", undefined, err.message, pending.room, pending.tx.chainId);
-      return { status: "failed", taskId, error: err.message };
-    }
-  },
-
-  "reject-tx": async (s, { taskId }) => {
-    const pending = pendingTxQueue.get(taskId);
-    if (!pending) return { error: "not_found", taskId, message: "No pending transaction with this taskId. Run pending-txs to see queued transactions." };
-    pendingTxQueue.delete(taskId);
-
-    await (s as any).sendTxResult(pending.taskId, "rejected", undefined, "User rejected transaction", pending.room, pending.tx.chainId);
-    return { status: "rejected", taskId };
   },
 
   // Payment utilities

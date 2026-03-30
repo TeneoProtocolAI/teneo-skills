@@ -240,7 +240,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.8").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.9").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 program.command("daemon").description("Manage the background daemon (start | stop | status)").argument("<action>", "start | stop | status").action(async (action) => {
   switch (action) {
     case "start": {
@@ -353,11 +353,10 @@ program.command("info").alias("agent-details").description("Show agent details, 
   console.log(`    teneo-cli command ${agent.agent_id} "${agent.commands?.[0]?.trigger || "help"}" --room <roomId>
 `);
 });
-program.command("command").description("Direct command to agent (use internal agent ID, not display name)").argument("<agent>", "Internal agent ID (e.g. x-agent-enterprise-v2)").argument("<cmd>", "Command string: {trigger} {argument}").option("--room <roomId>").option("--timeout <ms>", "Response timeout", "120000").option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)").option("--network <network>", "Payment network (alias for --chain)").option("--no-auto-sign-tx", "Don't auto-sign on-chain transactions. TX details are shown and queued for approve-tx/reject-tx.").action(async (agent, cmd, opts) => {
+program.command("command").description("Direct command to agent (use internal agent ID, not display name)").argument("<agent>", "Internal agent ID (e.g. x-agent-enterprise-v2)").argument("<cmd>", "Command string: {trigger} {argument}").option("--room <roomId>").option("--timeout <ms>", "Response timeout", "120000").option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)").option("--network <network>", "Payment network (alias for --chain)").action(async (agent, cmd, opts) => {
   const room = await resolveRoom(opts.room);
   const chain = opts.chain || opts.network;
-  const autoSignTx = opts.autoSignTx !== false;
-  out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout), autoSignTx }));
+  out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout) }));
 });
 program.command("quote").description("Check price for a command (does not execute)").argument("<message>").option("--room <roomId>").option("--chain <chain>").action(async (message, opts) => {
   const room = await resolveRoom(opts.room);
@@ -398,43 +397,6 @@ program.command("unsubscribe").description("Unsubscribe from room").argument("<r
 });
 program.command("room-available-agents").description("List agents available to add to a room").argument("<roomId>").action(async (roomId) => {
   out(await execViaDaemon("room-available-agents", { roomId }));
-});
-program.command("pending-txs").description("List pending transactions waiting for approval (when using --no-auto-sign-tx)").action(async () => {
-  const result = await execViaDaemon("pending-txs");
-  if (JSON_FLAG) {
-    out(result);
-    return;
-  }
-  const txs = result.transactions || [];
-  if (txs.length === 0) {
-    console.log("No pending transactions.");
-    return;
-  }
-  console.log(`
-  PENDING TRANSACTIONS (${txs.length}):`);
-  console.log("  " + "-".repeat(70));
-  for (const tx of txs) {
-    console.log(`
-  Task ID:     ${tx.taskId}`);
-    console.log(`  Agent:       ${tx.agentName}`);
-    console.log(`  Description: ${tx.description}`);
-    console.log(`  To:          ${tx.to || "?"}`);
-    console.log(`  Value:       ${tx.value} wei`);
-    console.log(`  Chain ID:    ${tx.chainId}`);
-    console.log(`  Data:        ${tx.data}`);
-    console.log(`  Optional:    ${tx.optional}`);
-    console.log(`  Received:    ${tx.receivedAt}`);
-  }
-  console.log(`
-  Approve: teneo-cli approve-tx <taskId>`);
-  console.log(`  Reject:  teneo-cli reject-tx <taskId>
-`);
-});
-program.command("approve-tx").description("Approve and sign a pending transaction").argument("<taskId>", "Task ID from pending-txs").action(async (taskId) => {
-  out(await execViaDaemon("approve-tx", { taskId }));
-});
-program.command("reject-tx").description("Reject a pending transaction").argument("<taskId>", "Task ID from pending-txs").action(async (taskId) => {
-  out(await execViaDaemon("reject-tx", { taskId }));
 });
 program.command("wallet-init").description("Show wallet status or create a new wallet").option("--force", "Force create a new wallet even if one exists").action(async (opts) => {
   if (!opts.force) {

@@ -296,7 +296,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.9")
+program.name("teneo-cli").version("2.0.10")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 
@@ -430,12 +430,10 @@ program.command("command")
   .option("--timeout <ms>", "Response timeout", "120000")
   .option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)")
   .option("--network <network>", "Payment network (alias for --chain)")
-  .option("--no-auto-sign-tx", "Don't auto-sign on-chain transactions. TX details are shown and queued for approve-tx/reject-tx.")
   .action(async (agent: string, cmd: string, opts: any) => {
     const room = await resolveRoom(opts.room);
     const chain = opts.chain || opts.network;
-    const autoSignTx = opts.autoSignTx !== false; // commander stores --no-auto-sign-tx as autoSignTx=false
-    out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout), autoSignTx }));
+    out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout) }));
   });
 
 program.command("quote")
@@ -491,39 +489,6 @@ program.command("unsubscribe").description("Unsubscribe from room").argument("<r
 
 program.command("room-available-agents").description("List agents available to add to a room").argument("<roomId>")
   .action(async (roomId: string) => { out(await execViaDaemon("room-available-agents", { roomId })); });
-
-// ─── Transaction Management (via daemon) ────────────────────────────────────
-
-program.command("pending-txs").description("List pending transactions waiting for approval (when using --no-auto-sign-tx)")
-  .action(async () => {
-    const result = await execViaDaemon("pending-txs");
-    if (JSON_FLAG) { out(result); return; }
-    const txs = result.transactions || [];
-    if (txs.length === 0) { console.log("No pending transactions."); return; }
-    console.log(`\n  PENDING TRANSACTIONS (${txs.length}):`);
-    console.log("  " + "-".repeat(70));
-    for (const tx of txs) {
-      console.log(`\n  Task ID:     ${tx.taskId}`);
-      console.log(`  Agent:       ${tx.agentName}`);
-      console.log(`  Description: ${tx.description}`);
-      console.log(`  To:          ${tx.to || "?"}`);
-      console.log(`  Value:       ${tx.value} wei`);
-      console.log(`  Chain ID:    ${tx.chainId}`);
-      console.log(`  Data:        ${tx.data}`);
-      console.log(`  Optional:    ${tx.optional}`);
-      console.log(`  Received:    ${tx.receivedAt}`);
-    }
-    console.log(`\n  Approve: teneo-cli approve-tx <taskId>`);
-    console.log(`  Reject:  teneo-cli reject-tx <taskId>\n`);
-  });
-
-program.command("approve-tx").description("Approve and sign a pending transaction")
-  .argument("<taskId>", "Task ID from pending-txs")
-  .action(async (taskId: string) => { out(await execViaDaemon("approve-tx", { taskId })); });
-
-program.command("reject-tx").description("Reject a pending transaction")
-  .argument("<taskId>", "Task ID from pending-txs")
-  .action(async (taskId: string) => { out(await execViaDaemon("reject-tx", { taskId })); });
 
 // ─── Wallet Management (local — no daemon needed) ──────────────────────────
 
