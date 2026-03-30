@@ -37,9 +37,6 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Messari BTC & ETH Tracker — Extract coin details
 ~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
 
-# Squid Router — Execute cross-chain token swaps between supported chains and
-~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
-
 # Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
 ~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
 

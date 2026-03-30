@@ -14,7 +14,6 @@
     "./skills/agents/teneo-agent-google-search-agent",
     "./skills/agents/teneo-agent-linkedin",
     "./skills/agents/teneo-agent-messari-btc-eth-tracker",
-    "./skills/agents/teneo-agent-squid-router",
     "./skills/agents/teneo-agent-uniswap-monitor",
     "./skills/agents/teneo-agent-vc-attention",
     "./skills/agents/teneo-agent-x-platform-agent",

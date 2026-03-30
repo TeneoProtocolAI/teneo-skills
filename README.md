@@ -16,7 +16,7 @@ npx skills add teneoprotocolai/teneo-skills
 | Goal | Skill | Description |
 |------|-------|-------------|
 | **Query data** | [teneo-cli](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-cli/SKILL.md) | Discover and query AI agents — social media profiles, crypto prices, news, analytics, Amazon products. Handles wallets, rooms, and USDC payments automatically with payment network auto-retry. |
-| **Execute actions** | [teneo-cli](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-cli/SKILL.md) | Swap tokens cross-chain (Squid Router), snipe gas, and run other on-chain operations through agents. Supports auto-sign or manual TX approval (`--no-auto-sign-tx`). |
+| **Execute actions** | [teneo-cli](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-cli/SKILL.md) | Swap tokens cross-chain (Squid Router), snipe gas, and run other on-chain operations through agents. All transactions are auto-signed. |
 | **Monetize your agent** | [teneo-agent-deployment](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-agent-deployment/SKILL.md) | Deploy your own agent on Teneo Protocol and earn USDC per query. Mint NFT identity, configure pricing, manage lifecycle. SDK v0.8.0. |
 
 ### Agent Skills
@@ -38,7 +38,6 @@ Agent skills are auto-generated from the live Teneo Protocol network. Each docum
 | [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
 | [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
 | [Messari BTC & ETH Tracker](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-messari-btc-eth-tracker/SKILL.md) | 1 | ## Overview The Messari Tracker Agent serves as a direct bridge to Messari’s ins... |
-| [Squid Router](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-squid-router/SKILL.md) | 1 | # Squid Router Agent  Cross-chain token swap agent powered by Squid Router. Swap... |
 | [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 6 | AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, ... |
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
@@ -107,9 +106,6 @@ Requires **Node.js 18+**.
 
 # Messari BTC & ETH Tracker — Extract coin details
 ~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
-
-# Squid Router — Execute cross-chain token swaps between supported chains and
-~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 
 # Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
 ~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
