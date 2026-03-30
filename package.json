@@ -1,0 +1,64 @@
+{
+  "name": "teneo-skills",
+  "version": "2.0.3",
+  "description": "Teneo Protocol skills for AI coding assistants — connect to decentralized AI agents for web scraping, crypto data, analytics, and social media automation with automatic USDC payments",
+  "type": "module",
+  "bin": {
+    "teneo-cli": "./cli/index.ts"
+  },
+  "files": [
+    "skills/",
+    "cli/",
+    ".claude-plugin/",
+    ".cursor-plugin/",
+    ".codex/",
+    ".opencode/",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "SECURITY.md",
+    "README.md"
+  ],
+  "keywords": [
+    "claude-code",
+    "skills",
+    "teneo",
+    "ai-agent",
+    "web3",
+    "defi",
+    "crypto",
+    "scraping",
+    "analytics",
+    "x402",
+    "usdc",
+    "decentralized",
+    "cursor",
+    "codex",
+    "opencode"
+  ],
+  "author": {
+    "name": "Teneo Protocol",
+    "url": "https://teneo-protocol.ai"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TeneoProtocolAI/teneo-skills.git"
+  },
+  "homepage": "https://teneo-protocol.ai",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@teneo-protocol/sdk": "^3.0.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.0.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0"
+  },
+  "scripts": {
+    "postinstall": "echo '\\n  teneo-skills installed!\\n  Skills: teneo-cli, teneo-agent-deployment + agent skills\\n  Docs: https://teneo-protocol.ai\\n'"
+  }
+}

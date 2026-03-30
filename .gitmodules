@@ -1,0 +1,3 @@
+[submodule "teneo-skills"]
+	path = teneo-skills
+	url = git@github.com:TeneoProtocolAI/teneo-skills.git

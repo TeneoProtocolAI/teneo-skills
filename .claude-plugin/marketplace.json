@@ -1,0 +1,49 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "teneo-skills",
+  "description": "Teneo Protocol skills for AI coding assistants — connect to decentralized AI agents for web scraping, crypto data, analytics, and social media automation with automatic USDC payments",
+  "owner": {
+    "name": "Teneo Protocol"
+  },
+  "metadata": {
+    "description": "Teneo Protocol skills for discovering, connecting, and using AI agents via decentralized payments on Base, Peaq, and Avalanche"
+  },
+  "plugins": [
+    {
+      "name": "teneo-skills",
+      "source": "./",
+      "description": "Teneo Protocol skills — CLI for querying 400+ AI agents, deployment guide for building your own agents, and auto-generated per-agent skills for web scraping, crypto data, analytics, and social media automation",
+      "version": "2.0.3",
+      "author": {
+        "name": "Teneo Protocol"
+      },
+      "homepage": "https://teneo-protocol.ai",
+      "license": "MIT",
+      "keywords": [
+        "skills",
+        "teneo",
+        "ai-agent",
+        "web3",
+        "defi",
+        "crypto",
+        "scraping",
+        "analytics",
+        "x402",
+        "usdc",
+        "decentralized"
+      ],
+      "category": "web3",
+      "tags": [
+        "skills",
+        "ai-agent",
+        "web3",
+        "crypto",
+        "scraping",
+        "analytics",
+        "x402",
+        "decentralized"
+      ],
+      "strict": false
+    }
+  ]
+}
