@@ -248,6 +248,7 @@ AGENT COMMANDS
 ROOM MANAGEMENT
   ~/teneo-skill/teneo rooms                          List all rooms
   ~/teneo-skill/teneo room-agents <roomId>           List agents in room
+  ~/teneo-skill/teneo room-available-agents <roomId> List agents available to add to a room
   ~/teneo-skill/teneo create-room <name>             Create room
   ~/teneo-skill/teneo update-room <roomId>           Update room
   ~/teneo-skill/teneo delete-room <roomId>           Delete room
@@ -261,8 +262,22 @@ ROOM MANAGEMENT
 WALLET MANAGEMENT
   ~/teneo-skill/teneo wallet-init                    Show wallet status or create a new wallet
   ~/teneo-skill/teneo wallet-address                 Show wallet public address
+  ~/teneo-skill/teneo wallet-pubkey                  Show wallet public key
   ~/teneo-skill/teneo wallet-export-key              Export private key (DANGEROUS)
   ~/teneo-skill/teneo wallet-balance                 Check USDC and native token balances on supported chains
+  ~/teneo-skill/teneo wallet-send <amount> <to> <chain> Send USDC to any address
+  ~/teneo-skill/teneo check-balance                  Check USDC balances across all payment networks (via daemon)
+  ~/teneo-skill/teneo export-login                   Print export TENEO_PRIVATE_KEY=... for shell reuse
+
+TRANSACTION APPROVAL
+  ~/teneo-skill/teneo pending-txs                    List pending transactions waiting for approval (when using --no-auto-sign-tx)
+  ~/teneo-skill/teneo approve-tx <taskId>            Approve and sign a pending transaction
+  ~/teneo-skill/teneo reject-tx <taskId>             Reject a pending transaction
+
+DAEMON & UPDATES
+  ~/teneo-skill/teneo daemon <action>                Manage the background daemon (start | stop | status)
+  ~/teneo-skill/teneo update                         Update the Teneo CLI to the latest version
+  ~/teneo-skill/teneo version                        Show installed and latest available version
 
 ```
 
@@ -366,6 +381,18 @@ List agents in room
 
 ```bash
 ~/teneo-skill/teneo room-agents <roomId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `roomId` | Yes | - |
+
+#### `room-available-agents`
+
+List agents available to add to a room
+
+```bash
+~/teneo-skill/teneo room-available-agents <roomId>
 ```
 
 | Argument | Required | Description |
@@ -506,6 +533,14 @@ Show wallet public address
 ~/teneo-skill/teneo wallet-address
 ```
 
+#### `wallet-pubkey`
+
+Show wallet public key
+
+```bash
+~/teneo-skill/teneo wallet-pubkey
+```
+
 #### `wallet-export-key`
 
 Export private key (DANGEROUS)
@@ -525,6 +560,104 @@ Check USDC and native token balances on supported chains
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--chain <chain>` | Specific chain (base|avax|peaq|xlayer) | - |
+
+#### `wallet-send`
+
+Send USDC to any address
+
+```bash
+~/teneo-skill/teneo wallet-send <amount> <to> <chain>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `amount` | Yes | Amount in USDC |
+| `to` | Yes | Destination address |
+| `chain` | Yes | Chain (base|avax|peaq|xlayer) |
+
+#### `check-balance`
+
+Check USDC balances across all payment networks (via daemon)
+
+```bash
+~/teneo-skill/teneo check-balance [--chain <chain>]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--chain <chain>` | Check specific chain only | - |
+
+#### `export-login`
+
+Print export TENEO_PRIVATE_KEY=... for shell reuse
+
+```bash
+~/teneo-skill/teneo export-login
+```
+
+### Transaction Approval
+
+#### `pending-txs`
+
+List pending transactions waiting for approval (when using --no-auto-sign-tx)
+
+```bash
+~/teneo-skill/teneo pending-txs
+```
+
+#### `approve-tx`
+
+Approve and sign a pending transaction
+
+```bash
+~/teneo-skill/teneo approve-tx <taskId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `taskId` | Yes | Task ID from pending-txs |
+
+#### `reject-tx`
+
+Reject a pending transaction
+
+```bash
+~/teneo-skill/teneo reject-tx <taskId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `taskId` | Yes | Task ID from pending-txs |
+
+### Daemon & Updates
+
+#### `daemon`
+
+Manage the background daemon (start | stop | status)
+
+```bash
+~/teneo-skill/teneo daemon <action>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `action` | Yes | start | stop | status |
+
+#### `update`
+
+Update the Teneo CLI to the latest version
+
+```bash
+~/teneo-skill/teneo update
+```
+
+#### `version`
+
+Show installed and latest available version
+
+```bash
+~/teneo-skill/teneo version
+```
 
 
 <!-- /COMMAND_REFERENCE -->
@@ -768,7 +901,9 @@ Search agent descriptions and command triggers semantically. Check pricing to in
 
 Room is auto-resolved. Agent is auto-added if not in room. Payment is auto-signed. Payment network auto-retries if funds are insufficient on the default chain.
 
-For operations involving on-chain transactions (swaps, bridges), pass `--no-auto-sign-tx` if you want to show the user what's about to be signed:
+**All transactions (payments AND on-chain swaps/bridges) are auto-signed by default. Do NOT use `approve-tx` or `pending-txs` unless the user explicitly passed `--no-auto-sign-tx`.** The normal flow requires no manual approval — just run the command and wait for the result.
+
+Only if the user explicitly asks to review transactions before signing, use `--no-auto-sign-tx`:
 
 ```bash
 ~/teneo-skill/teneo command "squid-router" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
