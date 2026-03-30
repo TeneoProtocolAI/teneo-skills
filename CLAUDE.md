@@ -22,38 +22,38 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Tiktok — Extracts video metadata
 ~/teneo-skill/teneo command "tiktok" "video <url>" --room <roomId>
 
-# CoinMarketCap Agent — use with quote/confirm flow
-~/teneo-skill/teneo quote "@coinmarketcap-agent <your request>" --room <roomId>
+# CoinMarketCap Agent — Returns the top-n cryptocurrencies ranked by market cap (max
+~/teneo-skill/teneo command "coinmarketcap-agent" "top <number>" --room <roomId>
 
-# CryptoQuant Pro 2.10 — use with quote/confirm flow
-~/teneo-skill/teneo quote "@cryptoquant-agent-v10 <your request>" --room <roomId>
+# CryptoQuant Pro 2.10 — Exchange netflow (BTC or ETH): Net movement. Positive = more
+~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
 
-# Google Search Agent — use with quote/confirm flow
-~/teneo-skill/teneo quote "@google-search-agent <your request>" --room <roomId>
+# Google Search Agent — Performs a Google search for the given query.
+~/teneo-skill/teneo command "google-search-agent" "search" --room <roomId>
 
-# LinkedIn — use with quote/confirm flow
-~/teneo-skill/teneo quote "@linkedin-agent <your request>" --room <roomId>
+# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
+~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
-# Messari BTC & ETH Tracker — use with quote/confirm flow
-~/teneo-skill/teneo quote "@messaribtceth <your request>" --room <roomId>
+# Messari BTC & ETH Tracker — Extract coin details
+~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
 
-# Squid Router — use with quote/confirm flow
-~/teneo-skill/teneo quote "@squid-router <your request>" --room <roomId>
+# Squid Router — Execute cross-chain token swaps between supported chains and
+~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 
-# Uniswap Monitor — use with quote/confirm flow
-~/teneo-skill/teneo quote "@uniswap-monitor-agent <your request>" --room <roomId>
+# Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
+~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
 
-# VC Attention — use with quote/confirm flow
-~/teneo-skill/teneo quote "@vc-attention <your request>" --room <roomId>
+# VC Attention — get you an example of the output file
+~/teneo-skill/teneo command "vc-attention" "getexamplefile" --room <roomId>
 
-# X Platform Agent — use with quote/confirm flow
-~/teneo-skill/teneo quote "@x-agent-enterprise-v2 <your request>" --room <roomId>
+# X Platform Agent — Get the text content and basic information for any post. Sho
+~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
 
-# Youtube — use with quote/confirm flow
-~/teneo-skill/teneo quote "@youtube <your request>" --room <roomId>
+# Youtube — The command lets you search for videos. Examples: /search ca
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
 
-# Aave V3 Liquidation Watcher — use with quote/confirm flow
-~/teneo-skill/teneo quote "@liquidation-agent <your request>" --room <roomId>
+# Aave V3 Liquidation Watcher — Discover whales from recent Borrow events. Default: 50000 bl
+~/teneo-skill/teneo command "liquidation-agent" "scan [blocks]" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -87,7 +87,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.4 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.5 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...
