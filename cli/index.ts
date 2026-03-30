@@ -296,7 +296,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.6")
+program.name("teneo-cli").version("2.0.7")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 
@@ -630,6 +630,40 @@ program.command("export-login").description("Print export TENEO_PRIVATE_KEY=... 
     const key = requireKey();
     // Print to stdout so it can be eval'd: eval $(teneo-cli export-login)
     console.log(`export TENEO_PRIVATE_KEY=${key}`);
+  });
+
+// ─── Update & Version ────────────────────────────────────────────────────────
+
+program.command("update").description("Update the Teneo CLI to the latest version")
+  .action(async () => {
+    const { execSync } = await import("node:child_process");
+    console.log("Updating Teneo CLI...");
+    try {
+      // Stop daemon before update
+      try { execSync("kill $(cat ~/.teneo-daemon.pid 2>/dev/null) 2>/dev/null", { stdio: "ignore" }); } catch {}
+      execSync("npx -y @teneo-protocol/cli", { stdio: "inherit" });
+    } catch (err: any) {
+      console.error("Update failed:", err.message || err);
+      process.exit(1);
+    }
+  });
+
+program.command("version").description("Show installed and latest available version")
+  .action(async () => {
+    const local = program.version();
+    console.log(`Installed: v${local}`);
+    try {
+      const { execSync } = await import("node:child_process");
+      const latest = execSync("npm view @teneo-protocol/cli version", { encoding: "utf-8", timeout: 10000 }).trim();
+      console.log(`Latest:    v${latest}`);
+      if (local !== latest) {
+        console.log(`\nUpdate available! Run: ~/teneo-skill/teneo update`);
+      } else {
+        console.log(`\nYou're up to date.`);
+      }
+    } catch {
+      console.log("Latest:    (could not check)");
+    }
   });
 
 // ─── Metadata Export ─────────────────────────────────────────────────────────
