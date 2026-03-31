@@ -414,6 +414,18 @@ program.command("info").alias("agent-details")
         console.log(`\n  ${cmd.usage}`);
         if (cmd.description) console.log(`    ${cmd.description}`);
         console.log(`    Price: ${price}`);
+        if (cmd.parameters?.length > 0) {
+          console.log(`    Parameters:`);
+          const maxName = Math.max(...cmd.parameters.map((p: any) => (p.name || "").length));
+          const maxType = Math.max(...cmd.parameters.map((p: any) => (p.type || "string").length));
+          for (const p of cmd.parameters) {
+            const name = (p.name || "").padEnd(maxName);
+            const type = (p.type || "string").padEnd(maxType);
+            const req = p.required !== false ? "(required)" : "(optional)";
+            const desc = p.description || "";
+            console.log(`      ${name}  ${type}  ${req}  ${desc}`);
+          }
+        }
       }
     }
     console.log(`\n  QUERY THIS AGENT:`);

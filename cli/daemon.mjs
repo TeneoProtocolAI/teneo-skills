@@ -317,10 +317,11 @@ function normalizeAgent(a) {
       const parsed = parseCatalogPricePerUnit(c.pricePerUnit ?? c.price_per_unit);
       const basePrice = getCatalogBasePrice(parsed);
       const isExplicitlyFree = hasExplicitCatalogPrice(parsed) && parsed === 0;
+      const paramUsage = c.parameters?.length > 0 && !c.argument ? " " + c.parameters.map((p) => p.required !== false ? `<${p.name}>` : `[${p.name}]`).join(" ") : c.argument ? " " + c.argument : "";
       return {
         trigger: c.trigger,
         description: c.description,
-        usage: `@${id} ${c.trigger}${c.argument ? " " + c.argument : ""}`,
+        usage: `@${id} ${c.trigger}${paramUsage}`,
         price: basePrice,
         price_scope: !hasExplicitCatalogPrice(parsed) ? "legacy-default-base-price" : parsed > 0 ? "base-command-price-only" : "free",
         task_unit: c.taskUnit || "per-query",
@@ -608,34 +609,16 @@ var handlers = {
       const roomAgents = await s.listRoomAgents(room);
       const agentInRoom = roomAgents.some((a) => a.agent_id === agent);
       if (!agentInRoom) {
-        const allRooms = liveRooms(s);
-        let bestRoom = null;
-        for (const r of allRooms) {
-          if (r.id === room) continue;
-          try {
-            const agents = await s.listRoomAgents(r.id);
-            if (agents.some((a) => a.agent_id === agent)) {
-              bestRoom = r.id;
-              log(`Autosummon: found agent "${agent}" already in room "${r.id}"`);
-              break;
-            }
-          } catch {
-          }
-        }
-        if (bestRoom) {
-          room = bestRoom;
-        } else {
-          if (roomAgents.length >= 5) {
-            const toRemove = roomAgents.find((a) => a.agent_id !== agent) || roomAgents[0];
-            log(`Autosummon: room full, removing "${toRemove.agent_id || toRemove.id}" to make space`);
-            await s.removeAgentFromRoom(room, toRemove.agent_id || toRemove.id);
-            await sleep(1e3);
-          }
-          log(`Autosummon: agent "${agent}" not in room, adding...`);
-          await s.addAgentToRoom(room, agent);
+        if (roomAgents.length >= 5) {
+          const toRemove = roomAgents.find((a) => a.agent_id !== agent) || roomAgents[0];
+          log(`Autosummon: room full, removing "${toRemove.agent_id || toRemove.id}" to make space`);
+          await s.removeAgentFromRoom(room, toRemove.agent_id || toRemove.id);
           await sleep(1e3);
-          log(`Autosummon: agent "${agent}" added to room "${room}"`);
         }
+        log(`Autosummon: agent "${agent}" not in room, adding...`);
+        await s.addAgentToRoom(room, agent);
+        await sleep(1e3);
+        log(`Autosummon: agent "${agent}" added to room "${room}"`);
       }
     } catch (checkErr) {
       log(`Autosummon check failed (non-fatal): ${checkErr.message}`);

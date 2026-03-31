@@ -388,9 +388,12 @@ function normalizeAgent(a: any) {
       const parsed = parseCatalogPricePerUnit(c.pricePerUnit ?? c.price_per_unit);
       const basePrice = getCatalogBasePrice(parsed);
       const isExplicitlyFree = hasExplicitCatalogPrice(parsed) && parsed === 0;
+      const paramUsage = c.parameters?.length > 0 && !c.argument
+        ? " " + c.parameters.map((p: any) => p.required !== false ? `<${p.name}>` : `[${p.name}]`).join(" ")
+        : c.argument ? " " + c.argument : "";
       return {
         trigger: c.trigger, description: c.description,
-        usage: `@${id} ${c.trigger}${c.argument ? " " + c.argument : ""}`,
+        usage: `@${id} ${c.trigger}${paramUsage}`,
         price: basePrice,
         price_scope: !hasExplicitCatalogPrice(parsed)
           ? "legacy-default-base-price"

@@ -240,7 +240,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.14").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.15").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 program.command("daemon").description("Manage the background daemon (start | stop | status)").argument("<action>", "start | stop | status").action(async (action) => {
   switch (action) {
     case "start": {
@@ -346,6 +346,18 @@ program.command("info").alias("agent-details").description("Show agent details, 
   ${cmd.usage}`);
       if (cmd.description) console.log(`    ${cmd.description}`);
       console.log(`    Price: ${price}`);
+      if (cmd.parameters?.length > 0) {
+        console.log(`    Parameters:`);
+        const maxName = Math.max(...cmd.parameters.map((p) => (p.name || "").length));
+        const maxType = Math.max(...cmd.parameters.map((p) => (p.type || "string").length));
+        for (const p of cmd.parameters) {
+          const name = (p.name || "").padEnd(maxName);
+          const type = (p.type || "string").padEnd(maxType);
+          const req = p.required !== false ? "(required)" : "(optional)";
+          const desc = p.description || "";
+          console.log(`      ${name}  ${type}  ${req}  ${desc}`);
+        }
+      }
     }
   }
   console.log(`
