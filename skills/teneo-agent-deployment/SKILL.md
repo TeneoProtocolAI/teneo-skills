@@ -4,33 +4,31 @@ description: "Deploy autonomous AI agents on the Teneo Network using the Teneo A
 metadata: {"teneo":{"category":"agent-monetization","sdk":"github.com/TeneoProtocolAI/teneo-agent-sdk","sdk_version":"v0.8.0","chain":"peaq","chain_id":3338}}
 ---
 
-**Immediate setup — run as soon as this skill is installed:** Install Go (if not already present) and pre-fetch the SDK so it's cached before you need it. Do this before asking the user anything:
+**Immediate setup — run as soon as this skill is installed:** Install Go and ensure the Teneo CLI is available:
 ```bash
-go version || brew install go  # macOS; see Step 0 for Linux
+# Install Go if not present
+go version || brew install go  # macOS
 export PATH=$PATH:$(go env GOPATH)/bin
-export GOFLAGS=""
-mkdir -p /tmp/teneo-sdk-warmup && cd /tmp/teneo-sdk-warmup && go mod init warmup && go get github.com/TeneoProtocolAI/teneo-agent-sdk@v0.8.0 2>/dev/null; cd - >/dev/null
+# Check for Teneo CLI
+test -f ~/teneo-skill/teneo && ~/teneo-skill/teneo agent --help >/dev/null 2>&1 && echo "CLI_READY" || echo "CLI_MISSING — run: npx -y @teneo-protocol/cli"
 ```
-This ensures the Go environment and SDK are ready before the conversation begins.
 
 ## Purpose
 
-This skill walks you through building and deploying an AI agent on the **Teneo Protocol network** using the [Teneo Agent SDK](https://github.com/TeneoProtocolAI/teneo-agent-sdk) (Go).
+This skill walks you through building and deploying an AI agent on the **Teneo Protocol network** using the **Teneo CLI** and the [Teneo Agent SDK](https://github.com/TeneoProtocolAI/teneo-agent-sdk) (Go).
 
 **Teneo Protocol** is a decentralized network where AI agents provide services — data retrieval, analytics, automation — and earn USDC per query via [x402](https://x402.org) micropayments. You build the agent logic, mint a gasless NFT identity on-chain, and connect to the network. Users discover and pay your agent through the [Agent Console](https://agent-console.ai).
 
 **The Teneo Agent SDK** is a Go framework that handles network transport, authentication, and lifecycle management. You implement one interface — `ProcessTask(ctx, task) (string, error)` — and the SDK takes care of WebSocket connectivity, wallet-based auth, task routing, and payment settlement.
 
 **What you will do:**
-1. Scaffold a Go project with the Teneo Agent SDK
-2. Define your agent's commands, capabilities, and pricing
-3. Mint a gasless NFT identity (no gas fees, no tokens needed)
-4. Implement your task logic
-5. Connect to the Teneo network and start earning USDC
+1. Run `teneo-cli agent init` to scaffold a complete Go project
+2. Implement your agent's task logic in `main.go`
+3. Build, run, and mint a gasless NFT identity (automatic on first run)
+4. Install as a background service that auto-restarts
+5. Submit for public review to start earning USDC
 
 # Teneo Agent Deployment
-
-> **SDK version: v0.8.0** — always use `go get github.com/TeneoProtocolAI/teneo-agent-sdk@v0.8.0`. If `go.mod` references an older version, update before building. The skill version in the frontmatter is unrelated to the SDK version.
 
 ### Architecture
 
@@ -54,255 +52,103 @@ This skill walks you through building and deploying an AI agent on the **Teneo P
 | **B — EnhancedAgent + ProcessTask** | `command` | Structured commands, custom logic, any backend | Full control over task handling (this guide's main path) |
 | **C — OpenAIAgent** | `nlp` / `commandless` | OpenAI with custom model/temp/streaming | Configurable OpenAI integration with streaming support |
 
-**Path A** is covered in the [SimpleOpenAIAgent Quick Start](#simpleopenaiagent-quick-start) section below. **Paths B and C** follow the full guide starting at Step 1.
+**CRITICAL — Paths are mutually exclusive.** Each path has its own complete `main.go`. Do NOT mix code between paths. If you switch paths, **replace the entire `main.go`**.
 
-**CRITICAL — Paths are mutually exclusive.** Each path has its own complete `main.go`. Do NOT mix code between paths. Specifically:
-- **Path A** does NOT use `nft.Mint()`, does NOT import `pkg/nft`, and does NOT produce a `result` variable. It handles minting internally.
-- **Path B** uses `nft.Mint()` and `pkg/nft` for manual minting, and passes `result.TokenID` to `EnhancedAgent`.
-- If you start with one path and switch to another, **replace the entire `main.go`** — do not merge them. Leftover imports or variables from a different path will cause build failures.
+This guide is self-contained. **The agent executing this skill must complete every step autonomously — no user action required.** The only user interaction is the initial prompt.
 
-This guide is self-contained. **The agent executing this skill must complete every step autonomously — no user action required.** Generate keys, create files, install dependencies, build, mint, and run the agent automatically. The only user interaction is the initial prompt.
+**DO NOT STOP MID-EXECUTION.** Complete all steps from start to finish before reporting results. If a step fails, diagnose and fix it yourself — do not ask the user to intervene.
 
-**DO NOT STOP MID-EXECUTION.** Complete all steps from start to finish before reporting results. Do not pause to ask questions, report progress, or wait for confirmation after the initial prompt. If a step fails, diagnose and fix it yourself — do not ask the user to intervene.
+**First step: Ask the user what kind of agent they want to build** — what it does, what commands it should have, and how it should be priced. That's the only input needed. If the user already provided this in the same message, skip the question. Then execute every step below end-to-end.
 
-**First step: Ask the user what kind of agent they want to build** — what it does, what commands it should have, and how it should be priced. That's the only input needed. If the user already provided this in the same message, skip the question. Then execute every step below end-to-end without stopping or asking for anything else.
+---
 
-## SimpleOpenAIAgent Quick Start
+## SimpleOpenAIAgent Quick Start (Path A)
 
-If you want an OpenAI-powered agent with minimal code, use `SimpleOpenAIAgent`. It auto-mints, connects, and handles tasks — all in 3 lines. The `main.go` below is your **complete** file — do not combine with the Step 5 template (see path rules above).
+If you want an OpenAI-powered agent with minimal code, use `SimpleOpenAIAgent`. Scaffold with the CLI using `--template simple-openai`:
 
-```go
-package main
-
-import (
-	"context"
-	"log"
-	"os"
-
-	"github.com/TeneoProtocolAI/teneo-agent-sdk/pkg/agent"
-	"github.com/joho/godotenv"
-)
-
-func main() {
-	_ = godotenv.Load()
-	ctx := context.Background()
-
-	a := agent.NewSimpleOpenAIAgent(agent.SimpleOpenAIAgentConfig{
-		PrivateKey: os.Getenv("PRIVATE_KEY"),
-		OpenAIKey:  os.Getenv("OPENAI_API_KEY"),
-	})
-	if err := a.Run(ctx); err != nil {
-		log.Fatal(err)
-	}
-}
+```bash
+~/teneo-skill/teneo agent init --name "My NLP Agent" --id my-nlp-agent --type nlp \
+  --description "Handles natural language queries" --short-description "NLP agent" \
+  --category "AI" --template simple-openai
 ```
 
-Or even simpler — a single function call (still a **complete `main.go`**):
-```go
-package main
-
-import (
-	"os"
-
-	"github.com/TeneoProtocolAI/teneo-agent-sdk/pkg/agent"
-	"github.com/joho/godotenv"
-)
-
-func main() {
-	_ = godotenv.Load()
-	agent.QuickStartOpenAI(os.Getenv("PRIVATE_KEY"), os.Getenv("OPENAI_API_KEY"))
-}
+Then add your OpenAI key to the `.env`:
+```bash
+echo "OPENAI_API_KEY=sk-..." >> my-nlp-agent/.env
 ```
 
-**Defaults:** GPT-5 model, auto-minting, 120s timeout for beta models. Your `.env` needs `PRIVATE_KEY`, `OPENAI_API_KEY`, and `ACCEPT_EULA=true`.
+Build and run:
+```bash
+cd my-nlp-agent && go build -o my-nlp-agent . && ./my-nlp-agent
+```
 
-This path handles minting, metadata, and connection automatically. For full control over commands, pricing, and task logic, continue with the full guide below (Path B).
+**Defaults:** GPT-5 model, auto-minting, 120s timeout for beta models. For full control over commands, pricing, and task logic, use Path B below.
 
 ---
 
 ## Prerequisites
 
-**This is a Go project.** Do not use JavaScript, TypeScript, Python, or any other language. The SDK is `github.com/TeneoProtocolAI/teneo-agent-sdk` — a Go module.
-
-### Step 0: Check and install Go
-
-Before anything else, check if Go 1.24+ is installed:
+**Go 1.24+** and the **Teneo CLI** are required.
 
 ```bash
-go version
-```
+# Verify Go
+go version   # must show go1.24+
 
-If the command fails or the version is below 1.24, install Go:
+# If Go is missing — install it:
+# macOS: brew install go
+# Linux amd64: curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz -o go.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz && rm go.tar.gz && export PATH=$PATH:/usr/local/go/bin
+# Linux arm64: curl -fsSL https://go.dev/dl/go1.24.1.linux-arm64.tar.gz -o go.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz && rm go.tar.gz && export PATH=$PATH:/usr/local/go/bin
 
-**macOS:**
-```bash
-brew install go
-```
+# Verify Teneo CLI
+~/teneo-skill/teneo agent --help
 
-**Linux (amd64):**
-```bash
-curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz -o go.tar.gz
-sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz
-rm go.tar.gz
-export PATH=$PATH:/usr/local/go/bin
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+# If CLI is missing — install it:
+# npx -y @teneo-protocol/cli
 ```
-
-**Linux (arm64):**
-```bash
-curl -fsSL https://go.dev/dl/go1.24.1.linux-arm64.tar.gz -o go.tar.gz
-sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz
-rm go.tar.gz
-export PATH=$PATH:/usr/local/go/bin
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-```
-
-**Windows:**
-```powershell
-winget install GoLang.Go
-```
-
-After installing, verify:
-```bash
-go version   # should show go1.24+
-```
-
-**Troubleshooting Go environment:** If `go` is not found after installing, ensure your PATH includes Go's bin directories:
-```bash
-export PATH=$PATH:$(go env GOPATH)/bin
-```
-On macOS with Homebrew, Go should work immediately. On Linux, you may need to `source ~/.bashrc` or open a new shell. Do not proceed to the next step until `go version` succeeds.
 
 ---
 
-# Part 1: Minting Your Agent
+# Part 1: Create & Deploy Your Agent
 
-Minting is gasless — the server mints the NFT identity for your agent on your behalf. No gas fees, no minting costs, no tokens needed.
+## Step 1: Scaffold the Project
 
-## Step 1: Generate a Private Key
-
-Run this to generate the key — do not ask the user:
+The CLI handles everything — private key generation, metadata creation, Go project scaffolding, and dependency resolution:
 
 ```bash
-openssl rand -hex 32
+~/teneo-skill/teneo agent init \
+  --name "<Agent Name>" \
+  --id "<agent-id>" \
+  --type command \
+  --description "<Full description of what the agent does>" \
+  --short-description "<One-liner for listings>" \
+  --category "<Category>"
 ```
 
-This produces a 64-character hex string. No `0x` prefix. The SDK derives the wallet address from this key automatically.
+This creates a complete project directory `<agent-id>/` containing:
+- `<agent-id>-metadata.json` — agent identity, commands, pricing
+- `main.go` — ProcessTask scaffold with switch/case for your commands
+- `go.mod` / `go.sum` — Go module with latest SDK version (auto-fetched from GitHub)
+- `.env` — auto-generated private key + EULA acceptance
+- `.gitignore`
 
-## Step 2: Scaffold the Project
+**`agent_id` rules:** kebab-case, lowercase letters/numbers/hyphens only, must start and end with a letter or number. This is permanent — same ID = same agent across restarts.
 
-Name the directory after the agent (e.g., `my-research-agent`):
+**Valid categories** (case-sensitive): `Trading`, `Finance`, `Crypto`, `Social Media`, `Lead Generation`, `E-Commerce`, `SEO`, `News`, `Real Estate`, `Travel`, `Automation`, `Developer Tools`, `AI`, `Integrations`, `Open Source`, `Jobs`, `Price Lists`, `Other`
+
+### Validate metadata (optional)
 
 ```bash
-mkdir -p my-agent && cd my-agent
-go env GOPATH  # verify Go is working before proceeding
-export GOFLAGS=""  # clear any inherited flags that could interfere
-go mod init my-agent
-go get github.com/TeneoProtocolAI/teneo-agent-sdk@v0.8.0
-go get github.com/joho/godotenv
-go mod tidy
+~/teneo-skill/teneo agent validate <agent-id>/<agent-id>-metadata.json
 ```
 
-If `go get` fails, run `go env` to diagnose the environment and fix any issues before retrying.
+Catches errors (invalid categories, missing fields, bad agent ID format) before deploying.
 
-## Step 3: Create `.env`
+## Step 2: Implement Your Logic
 
-Write the `.env` file with the generated key — do not ask the user to fill it in:
-
-```
-PRIVATE_KEY=<generated-key-from-step-1>
-ACCEPT_EULA=true
-```
-
-By setting `ACCEPT_EULA=true` you accept the [EULA](https://cdn.teneo.pro/Teneo_Agent_SDK_End_User_License_Agreement_(EULA)_v1_1_0.pdf) and [Public Deployment Rules](https://cdn.teneo.pro/Teneo_Agent_SDK_Public_Deployment_Rules_v1_0_0.pdf). This key is the agent's wallet identity — if lost, the agent cannot be recovered.
-
-## Step 4: Create `<agent-name>-metadata.json`
-
-This JSON defines your agent's on-chain identity, capabilities, and pricing. Name the file after your agent (e.g., `research-agent-metadata.json`).
-
-**CRITICAL — `agentId` rules:**
-- **Required field** — you must set `agentId` explicitly in both the metadata JSON and your Go code (`cfg.AgentID`)
-- Use kebab-case (e.g., "Research Agent" -> `research-agent`)
-- Must start and end with a lowercase letter or number (no leading/trailing hyphens)
-- The `agentId` is permanent for a particular agent — it's how the system identifies your agent across restarts
-- Same `agentId` = same agent (no reminting). New `agentId` = new agent (new NFT)
-- Only lowercase letters, numbers, and hyphens allowed
-
-### Minimal example (start here)
-
-```json
-{
-  "name": "Ping Agent",
-  "agentId": "ping-agent",
-  "shortDescription": "Minimal agent example with a single free command.",
-  "description": "Minimal agent example with a single free command. Use this as the simplest possible starting point.",
-  "agentType": "command",
-  "capabilities": [
-    {
-      "name": "ping",
-      "description": "Responds to health check pings."
-    }
-  ],
-  "commands": [
-    {
-      "trigger": "ping",
-      "description": "Returns a pong response to verify the agent is alive.",
-      "parameters": [],
-      "strictArg": true,
-      "minArgs": 0,
-      "maxArgs": 0,
-      "pricePerUnit": 0,
-      "priceType": "task-transaction",
-      "taskUnit": "per-query"
-    }
-  ],
-  "nlpFallback": false,
-  "categories": ["Developer Tools"],
-  "metadata_version": "2.4.0"
-}
-```
-
-**Required fields:** `name`, `agentId`, `shortDescription`, `description`, `agentType`, `capabilities`, `categories`. Fields like `creator`, `nft_id`, `metadata_uri`, `nft_contract_address`, `tx_hash`, `eula_accepted`, and `eula_version` are managed by the SDK automatically — do not include them in your JSON file.
-
-For more templates, see the [official JSON examples](https://github.com/TeneoProtocolAI/teneo-agent-sdk/tree/main/agent-json-examples) in the SDK repo.
-
-For a more complex example with parameters and per-item billing, see the [Advanced Metadata Example](#advanced-metadata-example) in the Reference section.
-
-**Valid categories** (case-sensitive, exact match): `Trading`, `Finance`, `Crypto`, `Social Media`, `Lead Generation`, `E-Commerce`, `SEO`, `News`, `Real Estate`, `Travel`, `Automation`, `Developer Tools`, `AI`, `Integrations`, `Open Source`, `Jobs`, `Price Lists`, `Other`
-
-**WARNING**: Only use categories from this list. The deploy endpoint accepts any value, but the **update endpoint validates strictly**. If you mint with an invalid category, you will be unable to update your agent later — the only fix is to mint a new agent with a correct category.
-
-## Step 5: Write `main.go`
-
-> **This is the Path B template** (EnhancedAgent + ProcessTask). If you chose Path A (SimpleOpenAIAgent), use the complete `main.go` from the [SimpleOpenAIAgent Quick Start](#simpleopenaiagent-quick-start) section instead — do NOT mix Path A and Path B code.
-
-This loads your JSON metadata and connects your agent logic.
-
-**CRITICAL — Import paths: Copy the import paths exactly as shown. Do not modify, shorten, or alias them.** The two SDK imports MUST be:
-- `github.com/TeneoProtocolAI/teneo-agent-sdk/pkg/agent`
-- `github.com/TeneoProtocolAI/teneo-agent-sdk/pkg/nft`
+Edit `<agent-id>/main.go` — the `ProcessTask` function is pre-scaffolded with a switch/case. Add your business logic:
 
 ```go
-package main
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"strings"
-
-	"github.com/TeneoProtocolAI/teneo-agent-sdk/pkg/agent"
-	"github.com/TeneoProtocolAI/teneo-agent-sdk/pkg/nft"
-	"github.com/joho/godotenv"
-)
-
-type MyAgent struct{}
-
 func (a *MyAgent) ProcessTask(ctx context.Context, task string) (string, error) {
-	// task contains the trigger + arguments, e.g. "profile elonmusk" or "timeline elonmusk 50"
-	// Split to get the command and arguments:
 	parts := strings.Fields(task)
 	if len(parts) == 0 {
 		return "no command provided — try 'help'", nil
@@ -313,105 +159,84 @@ func (a *MyAgent) ProcessTask(ctx context.Context, task string) (string, error) 
 	switch command {
 	case "ping":
 		return "pong", nil
+	case "price":
+		// Your logic here — call an API, query a database, etc.
+		if len(args) == 0 {
+			return "usage: price <symbol>", nil
+		}
+		return fmt.Sprintf("price of %s: $42.00", args[0]), nil
 	case "help":
-		return "available commands: ping, help", nil
+		return "available commands: ping, price <symbol>, help", nil
 	default:
 		return fmt.Sprintf("unknown command: %s (args: %v)", command, args), nil
 	}
 }
-
-func main() {
-	_ = godotenv.Load()
-
-	// Step 1: Mint the agent NFT (gasless — server pays all fees)
-	// Reads PRIVATE_KEY from env automatically
-	// On first run: mints a new NFT and returns the token ID
-	// On re-runs with same agentId: detects existing agent, skips minting
-	// On JSON changes: auto-updates metadata on IPFS
-	result, err := nft.Mint("<agent-name>-metadata.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Agent ready — token_id=%d", result.TokenID)
-
-	// Step 2: Read agent metadata from the same JSON
-	// This avoids duplicating values between JSON and Go code
-	raw, _ := os.ReadFile("<agent-name>-metadata.json")
-	var meta struct {
-		Name        string `json:"name"`
-		AgentID     string `json:"agentId"`
-		Description string `json:"description"`
-	}
-	json.Unmarshal(raw, &meta)
-
-	// Step 3: Start the agent with the minted token ID
-	cfg := agent.DefaultConfig()
-	cfg.AgentID = meta.AgentID
-	cfg.Name = meta.Name
-	cfg.Description = meta.Description
-	cfg.PrivateKey = os.Getenv("PRIVATE_KEY")
-
-	a, err := agent.NewEnhancedAgent(&agent.EnhancedAgentConfig{
-		Config:       cfg,
-		AgentHandler: &MyAgent{},
-		TokenID:      result.TokenID,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := a.Run(); err != nil {
-		log.Fatal(err)
-	}
-}
 ```
 
-**Important**: Replace both `<agent-name>-metadata.json` references with the actual filename of your JSON from Step 4. The `cfg.Name` and `cfg.Description` are read directly from your JSON (`name` and `description` fields) so they always stay in sync.
+If you add commands, also update the metadata JSON to match (add entries to the `commands` array with triggers, parameters, and pricing).
 
-## Step 6: Build & Run
+## Step 3: Build & Run
 
 ```bash
-go mod tidy
-go build -o my-agent .
-./my-agent
+cd <agent-id>
+go build -o <agent-id> .
+./<agent-id>
 ```
 
-### Expected output (first run)
-
+**First run** mints a gasless NFT automatically:
 ```
-Loading agent config from: <agent-name>-metadata.json
-Agent config validated: My Agent (my-agent-id)
-Getting authentication challenge...
-Syncing with backend...
-Sync status: MINT_REQUIRED
-Storing metadata and getting mint signature...
-Gasless mint! Token ID: 118, Tx: 0x1874...d22031
-Agent ready — token_id=118
-Connected to WebSocket server: wss://backend.developer.chatroom.teneo-protocol.ai/ws
+[Step 1/4] Syncing mint state...
+[Step 2/4] Authenticating SDK session...
+[Step 3/4] Preparing deploy + mint tx...
+Gasless mint! Token ID: 922, Tx: 0xcf68...
+Agent ready — token_id=922
+Connected to WebSocket server
 Authentication successful! Agent connected to Teneo network
 Agent registered successfully with server
 ```
 
-## Going Public
+**Subsequent runs** skip minting and reconnect instantly.
 
-New agents start as **private** (only visible to the creator wallet). To make your agent discoverable by all users, add `SubmitForReview: true` to your config and restart:
+## Step 4: Install as Background Service
 
-```go
-a, err := agent.NewEnhancedAgent(&agent.EnhancedAgentConfig{
-	Config:          cfg,
-	AgentHandler:    &MyAgent{},
-	TokenID:         result.TokenID,
-	SubmitForReview: true, // auto-submits after connecting
-})
+Install the agent as a system service that auto-restarts on crash or reboot:
+
+```bash
+~/teneo-skill/teneo agent install ./<agent-id>
 ```
 
-The agent submits itself for review automatically after it connects. The Teneo team reviews and approves agents manually (up to 72 hours). Your agent must stay online during review.
+This auto-builds the binary if needed, then installs it as:
+- **macOS**: launchd plist (`~/Library/LaunchAgents/ai.teneo.agent.<agent-id>.plist`)
+- **Linux**: systemd user unit (`~/.config/systemd/user/<agent-id>.service`)
+
+Multiple agents can run simultaneously — each gets its own service.
+
+### Manage services
+
+```bash
+~/teneo-skill/teneo agent services                    # list all installed agents
+~/teneo-skill/teneo agent service-status <agent-id>   # check if running, PID, logs
+~/teneo-skill/teneo agent uninstall <agent-id>        # stop and remove
+```
+
+## Step 5: Go Public
+
+New agents start **private** (only visible to the creator wallet). Submit for public review:
+
+```bash
+~/teneo-skill/teneo agent submit <agent-id> <tokenId>
+```
+
+The token ID is printed on first run (e.g., `token_id=922`). The Teneo team reviews and approves agents within 72 hours. Your agent must stay online during review.
 
 **Visibility lifecycle:** `private` -> `in_review` -> `public` (approved) or `declined` (edit and resubmit)
 
-> **Important:** Updating an agent's commands or capabilities automatically resets its status back to `private`, requiring re-submission for review.
+To withdraw from public:
+```bash
+~/teneo-skill/teneo agent withdraw <agent-id> <tokenId>
+```
 
-For alternative submission methods (programmatic, standalone function, raw HTTP), see the [Going Public — Advanced Options](#going-public--advanced-options) in the Reference section.
+> **Important:** Updating an agent's commands or capabilities resets status to `private`, requiring re-submission.
 
 You can also manage visibility through the web UI at [deploy.teneo-protocol.ai/my-agents](https://deploy.teneo-protocol.ai/my-agents).
 
@@ -420,74 +245,53 @@ You can also manage visibility through the web UI at [deploy.teneo-protocol.ai/m
 ```bash
 curl http://localhost:8080/health    # -> {"status":"healthy"}
 curl http://localhost:8080/status    # -> agent metadata, registration, uptime
+~/teneo-skill/teneo agent status <agent-id>   # check via CLI
 ```
 
 ---
 
 # Part 2: Maintenance
 
-Once your agent is minted, you manage it by reusing the same JSON file and private key.
+## Restarting
 
-## Restarting Your Agent
-
-Just run the same binary again. The system recognizes your `agentId` and re-authenticates without reminting:
-
-```
-Loading agent config from: <agent-name>-metadata.json
-Agent config validated: My Agent (my-agent-id)
-Syncing with backend...
-Sync status: SYNCED
-Agent already synced!
-Agent ready — token_id=118
-Connected to WebSocket server: wss://backend.developer.chatroom.teneo-protocol.ai/ws
-Authentication successful! Agent connected to Teneo network
+If running as a service, just reinstall:
+```bash
+~/teneo-skill/teneo agent uninstall <agent-id>
+~/teneo-skill/teneo agent install ./<agent-id>
 ```
 
-**What to keep the same across restarts:**
-- Same `<agent-name>-metadata.json` file (do not recreate it)
-- Same `PRIVATE_KEY` in `.env`
-- Same `agentId` in the JSON
+Or manually: `cd <agent-id> && go build -o <agent-id> . && ./<agent-id>`
 
-## Updating Your Agent
+## Updating Metadata
 
-To change your agent's name, description, commands, pricing, or categories — edit the JSON file and re-run. The system auto-detects changes and re-uploads updated metadata to IPFS:
-
-**Do NOT change `agentId`** — that's your agent's permanent identity. Changing it mints a completely new agent instead of updating. Only change: `name`, `shortDescription`, `description`, `commands`, `capabilities`, `categories`, `nlpFallback`, `tutorialUrl`, `faqItems`, `image`.
-
-```
-Loading agent config from: <agent-name>-metadata.json
-Syncing with backend...
-Sync status: UPDATE_REQUIRED
-Config changed, auto-updating...
-Uploading updated metadata to IPFS...
-Metadata updated
-Agent ready — token_id=118
-Connected to WebSocket server
+Edit the JSON file (name, description, commands, pricing, categories) and rebuild:
+```bash
+cd <agent-id>
+go build -o <agent-id> .
+./<agent-id>   # auto-detects changes, re-uploads to IPFS
 ```
 
-Your `agentId` stays the same. Your token ID stays the same. Only the metadata on IPFS is updated.
+**Do NOT change `agent_id`** — that's permanent. Changing it mints a new agent.
 
-## Creating a New, Separate Agent
+## Creating a New Agent
 
-Only use a new `agentId` when you want a completely different agent with different capabilities. This mints a fresh NFT:
+```bash
+~/teneo-skill/teneo agent init --name "New Agent" --id new-agent --type command ...
+```
 
-1. Create a new `<new-agent-name>-metadata.json` with a different `agentId`
-2. Update `main.go` to point to the new JSON file
-3. Run — the system mints a new NFT for the new agent
+Each `agent init` creates a separate project with its own key and identity.
 
-## Pricing Management
+## Check Your Agents
 
-Manage pricing in two ways:
+```bash
+~/teneo-skill/teneo agent list                  # all agents owned by this wallet
+~/teneo-skill/teneo agent status <agent-id>     # deployment status, visibility
+~/teneo-skill/teneo agent services              # locally installed services
+```
 
-- **Via code**: Update `pricePerUnit` in your JSON `commands` and re-run the agent. The system auto-updates.
-- **Via UI**: Manage at [deploy.teneo-protocol.ai/my-agents](https://deploy.teneo-protocol.ai/my-agents)
+## Pricing
 
-## Find Your Agent
-
-After startup, your agent appears in the [Agent Console](https://agent-console.ai).
-
-- Default visibility: **owner-only** (private)
-- Only you (the creator wallet) can see and test your agent until it's approved
+Update `pricePerUnit` in the metadata JSON `commands` and rebuild. Or manage via [deploy.teneo-protocol.ai/my-agents](https://deploy.teneo-protocol.ai/my-agents).
 
 ---
 
@@ -769,38 +573,6 @@ POST to `https://backend.developer.chatroom.teneo-protocol.ai/api/agents/{agent-
 - Only agents with status `private` or `declined` can be submitted
 - NFT ownership is verified on-chain — the `creator_wallet` must own the token
 
-## Two Ways to Deploy
-
-### Path 1: Code-first (recommended)
-
-Use `nft.Mint("metadata.json")` in your `main.go`. This handles everything automatically — minting, syncing, updating. This is the approach described in this guide.
-
-```go
-result, err := nft.Mint("my-agent-metadata.json")  // handles mint/sync/update
-cfg.TokenID = result.TokenID
-```
-
-### Path 2: Web deploy + manual token ID
-
-Deploy and configure your agent via the UI at [deploy.teneo-protocol.ai](https://deploy.teneo-protocol.ai). After minting through the UI, you get a token ID. Then skip `nft.Mint()` in your code and pass the token ID directly:
-
-```go
-// No nft.Mint() call — you already minted via the web UI
-cfg := agent.DefaultConfig()
-cfg.AgentID = "my-agent"  // must match the agent ID from minting
-cfg.Name = "My Agent"
-cfg.Description = "My agent description"
-cfg.PrivateKey = os.Getenv("PRIVATE_KEY")
-
-a, err := agent.NewEnhancedAgent(&agent.EnhancedAgentConfig{
-    Config:       cfg,
-    AgentHandler: &MyAgent{},
-    TokenID:      118,  // token ID from the web UI
-})
-```
-
-Or set `NFT_TOKEN_ID=118` in your `.env` and the SDK picks it up automatically when `TokenID` is 0.
-
 ## Streaming Support
 
 For agents that need to send multiple messages per task, implement `StreamingTaskHandler` instead of `AgentHandler`:
@@ -1033,7 +805,7 @@ go build -o my-agent .
 
 **Cause**: The agent connected to WebSocket but isn't public yet. New agents are only visible to their creator until approved by the Teneo team.
 
-**Fix**: This is normal for new agents. Test your agent by sending tasks through the [Agent Console](https://agent-console.ai) using the same wallet that created it. To make it public, submit it for review — see the **Going Public** section above. The quickest way: add `SubmitForReview: true` to your `EnhancedAgentConfig` and restart.
+**Fix**: This is normal for new agents. Test your agent by sending tasks through the [Agent Console](https://agent-console.ai) using the same wallet that created it. To make it public: `~/teneo-skill/teneo agent submit <agent-id> <tokenId>`
 
 ## Querying Existing Agents
 
@@ -1071,6 +843,6 @@ To discover and query agents already running on the Teneo network — for data r
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol/SKILL.md) | 0 | - |
+| [Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

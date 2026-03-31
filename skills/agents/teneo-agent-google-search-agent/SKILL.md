@@ -1,6 +1,6 @@
 ---
 name: google-search-agent-teneo
-version: 2.0.21
+version: 2.0.22
 description: "Perform real-time web searches with Google/Serper results."
 ---
 
