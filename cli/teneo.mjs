@@ -13941,7 +13941,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.16").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.17").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 program.command("daemon").description("Manage the background daemon (start | stop | status)").argument("<action>", "start | stop | status").action(async (action) => {
   switch (action) {
     case "start": {
@@ -14248,16 +14248,19 @@ function validateAgentId(agentId) {
 function validateMetadata(meta) {
   const errors = [];
   if (!meta.name) errors.push({ field: "name", message: "name is required" });
-  if (!meta.agentId) errors.push({ field: "agentId", message: "agentId is required" });
+  const agentId = meta.agent_id || meta.agentId;
+  if (!agentId) errors.push({ field: "agent_id", message: "agent_id is required" });
   else {
-    const idErr = validateAgentId(meta.agentId);
-    if (idErr) errors.push({ field: "agentId", message: idErr });
+    const idErr = validateAgentId(agentId);
+    if (idErr) errors.push({ field: "agent_id", message: idErr });
   }
-  if (!meta.shortDescription) errors.push({ field: "shortDescription", message: "shortDescription is required" });
+  const shortDesc = meta.short_description || meta.shortDescription;
+  if (!shortDesc) errors.push({ field: "short_description", message: "short_description is required" });
   if (!meta.description) errors.push({ field: "description", message: "description is required" });
-  if (!meta.agentType) errors.push({ field: "agentType", message: "agentType is required" });
-  else if (!VALID_AGENT_TYPES.includes(meta.agentType))
-    errors.push({ field: "agentType", message: `agentType must be one of: ${VALID_AGENT_TYPES.join(", ")}` });
+  const agentType = meta.agent_type || meta.agentType;
+  if (!agentType) errors.push({ field: "agent_type", message: "agent_type is required" });
+  else if (!VALID_AGENT_TYPES.includes(agentType))
+    errors.push({ field: "agent_type", message: `agent_type must be one of: ${VALID_AGENT_TYPES.join(", ")}` });
   if (!meta.capabilities || !Array.isArray(meta.capabilities))
     errors.push({ field: "capabilities", message: "capabilities array is required" });
   if (!meta.categories || !Array.isArray(meta.categories) || meta.categories.length === 0)
@@ -14317,7 +14320,7 @@ async function getLatestSDKVersion() {
   return SDK_FALLBACK_VERSION;
 }
 async function scaffoldAgent(meta, opts) {
-  const agentId = meta.agentId;
+  const agentId = meta.agent_id || meta.agentId;
   const dir = agentId;
   if (nodeFs.existsSync(dir)) fail(`Directory "${dir}" already exists.`);
   nodeFs.mkdirSync(dir, { recursive: true });
@@ -14429,7 +14432,7 @@ func main() {
 	raw, _ := os.ReadFile("${metaFilename}")
 	var meta struct {
 		Name        string \`json:"name"\`
-		AgentID     string \`json:"agentId"\`
+		AgentID     string \`json:"agent_id"\`
 		Description string \`json:"description"\`
 	}
 	json.Unmarshal(raw, &meta)
@@ -14506,10 +14509,10 @@ agentCmd.command("init").description("Create agent metadata JSON and scaffold Go
   if (!agentId) agentId = toKebabCase(name);
   const metadata = {
     name,
-    agentId,
-    shortDescription,
+    agent_id: agentId,
+    short_description: shortDescription,
     description,
-    agentType,
+    agent_type: agentType,
     capabilities: [],
     commands: agentType === "command" ? [
       {
@@ -14524,7 +14527,7 @@ agentCmd.command("init").description("Create agent metadata JSON and scaffold Go
         taskUnit: "per-query"
       }
     ] : [],
-    nlpFallback: agentType !== "command",
+    nlp_fallback: agentType !== "command",
     categories,
     metadata_version: "2.4.0"
   };
@@ -14542,7 +14545,7 @@ agentCmd.command("init").description("Create agent metadata JSON and scaffold Go
     const result = await scaffoldAgent(metadata, { type: opts.template || "enhanced", useCliKey: !!opts.useCliKey });
     out({
       status: "created",
-      agentId,
+      agent_id: agentId,
       name,
       directory: result.dir,
       files: result.files,
@@ -14556,7 +14559,7 @@ agentCmd.command("init").description("Create agent metadata JSON and scaffold Go
   } else {
     const filename = `${agentId}-metadata.json`;
     nodeFs.writeFileSync(filename, JSON.stringify(metadata, null, 2));
-    out({ status: "created", file: filename, agentId, name });
+    out({ status: "created", file: filename, agent_id: agentId, name });
   }
 });
 agentCmd.command("validate").description("Validate agent metadata JSON file").argument("<file>", "Path to metadata JSON file").action(async (file) => {
@@ -14577,7 +14580,7 @@ agentCmd.command("validate").description("Validate agent metadata JSON file").ar
     }
     process.exit(1);
   }
-  out({ status: "valid", agentId: meta.agentId, name: meta.name, commands: meta.commands?.length || 0, categories: meta.categories });
+  out({ status: "valid", agent_id: meta.agent_id || meta.agentId, name: meta.name, commands: meta.commands?.length || 0, categories: meta.categories });
 });
 agentCmd.command("submit").description("Submit agent for public review").argument("<agentId>", "Agent ID").argument("<tokenId>", "NFT token ID").action(async (agentId, tokenIdStr) => {
   const tokenId = parseInt(tokenIdStr);
@@ -14751,8 +14754,8 @@ agentCmd.command("install").description("Install agent as a background service (
   const absDir = nodePath.resolve(directory);
   if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${absDir}`);
   const meta = findMetadataInDir(absDir);
-  const agentId = meta.agentId;
-  if (!agentId) fail("agentId not found in metadata JSON.");
+  const agentId = meta.agent_id || meta.agentId;
+  if (!agentId) fail("agent_id not found in metadata JSON.");
   let binaryPath = nodePath.join(absDir, agentId);
   if (!nodeFs.existsSync(binaryPath)) {
     console.error(JSON.stringify({ info: `Binary not found, building with go build...` }));

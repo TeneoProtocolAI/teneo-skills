@@ -1,10 +1,10 @@
 ---
-name: linkedin-teneo
+name: layerzero-teneo
 version: 2.0.18
-description: "LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn URL and it will return its data from LinkedIn, in a structured JSON format. It works with both People and Companies URL."
+description: "Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports swapping tokens across EVM chains including Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, and more. Handles m"
 ---
 
-# LinkedIn - powered by Teneo Protocol
+# LayerZero - powered by Teneo Protocol
 
 ## Purpose
 
@@ -20,7 +20,7 @@ See the `teneo-agent-deployment` skill to deploy a Go agent on Teneo Protocol an
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
 
-LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn URL and it will return its data from LinkedIn, in a structured JSON format. It works with both People and Companies URL.
+Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports swapping tokens across EVM chains including Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, and more. Handles multi-step transactions (approvals + swaps) automatically.
 
 ## Commands
 
@@ -30,13 +30,13 @@ First, ensure the CLI is installed (see the teneo-cli skill for setup — the fu
 
 | Command | Arguments | Price | Description |
 |---------|-----------|-------|-------------|
-| `enrich_url` | <url> | $0.006/per-query | Enrich a LinkedIn profile URL with information like name, headline, location, industry, etc. |
+| `swap` | <amount> <fromToken> <fromChain> <toToken> <toChain> | Free | Swap tokens across chains. Fetches a quote from LayerZero, then walks through approval and swap steps automatically. |
 
 ### Quick Reference
 
 ```bash
-# Agent ID: linkedin-agent
-~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
+# Agent ID: layerzero
+~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
 ```
 
 ## Setup
@@ -64,18 +64,18 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 
 ## Usage Examples
 
-### `enrich_url`
+### `swap`
 
-Enrich a LinkedIn profile URL with information like name, headline, location, industry, etc.
+Swap tokens across chains. Fetches a quote from LayerZero, then walks through approval and swap steps automatically.
 
 ```bash
-~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
+~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
 ```
 
 Response is JSON. Extract the `humanized` field for formatted text.
 
 ## Agent Info
 
-- **ID:** `linkedin-agent`
-- **Name:** LinkedIn
+- **ID:** `layerzero`
+- **Name:** LayerZero
 
