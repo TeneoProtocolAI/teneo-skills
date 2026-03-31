@@ -1,6 +1,6 @@
 ---
 name: tiktok-teneo
-version: 2.0.20
+version: 2.0.21
 description: "Overview The TikTok Agent allows users to extract data from TikTok, including video metrics, creator profiles, and hashtag velocity, to bypass the limitations of manual trend-spotting.  With the TikTo"
 ---
 

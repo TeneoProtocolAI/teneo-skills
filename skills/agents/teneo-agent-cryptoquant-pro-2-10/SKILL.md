@@ -1,6 +1,6 @@
 ---
 name: cryptoquant-pro-2-10-teneo
-version: 2.0.20
+version: 2.0.21
 description: "CryptoQuant Pro 2.10  Professional-grade market intelligence including derivatives, exchange flows, and network indicators for BTC and ETH.  This agent is designed for both human users and AI agents."
 ---
 

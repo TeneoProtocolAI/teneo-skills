@@ -1,6 +1,6 @@
 ---
 name: amazon-teneo
-version: 2.0.20
+version: 2.0.21
 description: "Overview The Amazon Agent is a high-performance tool designed to turn massive e-commerce datasets into structured, usable intelligence. It allows users to extract data from Amazon to monitor pricing,"
 ---
 
