@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.15
+version: 2.0.16
 description: "Teneo CLI — query 400+ AI agents on the Teneo Protocol network from the terminal. Discover agents, manage rooms, handle x402 USDC micropayments, sign or review on-chain transactions, and auto-generate encrypted wallets. Background daemon keeps a persistent WebSocket connection. Use when the user needs real-time data (social media profiles, hotel search, crypto prices, gas fees, Amazon products, news) or multi-agent workflows."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -71,7 +71,7 @@ You should see JSON output with connection status and the CLI version number.
 **Always tell the user the installed version and which agents are available.** Example:
 
 > Teneo CLI v2.1.0 installed. Found 12 agents on the network:
-> - Squid Router — cross-chain token swaps
+> - Cross-chain swap agent — token swaps across chains
 > - X Platform Agent — Twitter/X data
 > - ...
 
@@ -171,7 +171,7 @@ Every `~/teneo-skill/teneo` command outputs a **single JSON object** to stdout. 
 
 1. **Never parse or respond based on partial output.** If you see incomplete or malformed JSON, the command is still running — wait for it to finish.
 2. **Wait for the process exit code** before reading stdout. Exit 0 = success, non-zero = error (details on stderr).
-3. **Set a shell timeout of at least 120 seconds** for all Teneo CLI commands. Agent queries (`command`, `quote`, `confirm`) take 10-30 seconds. Discovery commands (`list-agents`, `discover`) return large JSON payloads.
+3. **Set a shell timeout of at least 120 seconds** for all Teneo CLI commands. Agent queries (`command`, `quote`, `confirm`) take 10-30 seconds. Discovery commands (`list-agents`, `discover`) return large JSON payloads. **Note:** The CLI `--timeout` flag only exists on the `command` subcommand. Do NOT pass `--timeout` to `list-agents`, `info`, `discover`, or other commands — they will error.
 4. **Run Teneo commands one at a time, never in parallel.** Each command talks to the background daemon — parallel commands may conflict.
 5. **Prefer targeted queries over full discovery** to reduce output size:
    - Use `list-agents --search "keyword"` instead of `list-agents` when looking for a specific agent
@@ -207,11 +207,12 @@ An agent can show `"status": "online"` in `info` but still be **disconnected in 
 
 Before **every** agent query, follow this checklist:
 
-1. **Get agent commands** — run `~/teneo-skill/teneo info <agentId>` to see exact command syntax and pricing. Never guess commands.
-2. **Check agent status** — if offline or disconnected, do NOT add to room or query. Find an alternative.
-3. **Check room capacity** — run `~/teneo-skill/teneo room-agents <roomId>` to see current agents (max 5). If full, remove one or create a new room.
-4. **Know your fallbacks** — if your target agent is unreachable, check for similar agents already in the room.
-5. **For social media handles** — web search first to find the correct `@handle` before querying. Wrong handles waste money.
+1. **Find the agent's room** — run `~/teneo-skill/teneo room-agents <roomId>` on your rooms to confirm which room has the target agent. Do NOT assume the default room — agents may be in a different room. If the agent isn't in any room, add it first.
+2. **Get agent commands** — run `~/teneo-skill/teneo info <agentId>` to see exact command syntax and pricing. Never guess commands.
+3. **Check agent status** — if offline or disconnected, do NOT add to room or query. Find an alternative.
+4. **Check room capacity** — if the room has 5 agents already, remove one or create a new room.
+5. **Know your fallbacks** — if your target agent is unreachable, check for similar agents already in the room.
+6. **For social media handles** — web search first to find the correct `@handle` before querying. Wrong handles waste money.
 
 ### Room Rules
 
@@ -659,7 +660,7 @@ If the payment fails on the default chain (e.g. insufficient USDC on Base), the 
 To force a specific chain, use `--chain` or `--network`:
 
 ```bash
-~/teneo-skill/teneo command "squid-router" "swap 0.5 USDC base USDC avalanche" --chain avalanche
+~/teneo-skill/teneo command "<swap-agent-id>" "swap 0.5 USDC base USDC avalanche" --chain avalanche
 ```
 
 ### Check Balances Before Querying
@@ -678,7 +679,7 @@ Returns USDC balances across all payment networks and recommends which chain to 
 
 ## On-Chain Transaction Signing
 
-Some agents (e.g. Squid Router for swaps) request on-chain transactions. The CLI handles these automatically.
+Some agents (e.g. swap/bridge agents) request on-chain transactions. The CLI handles these automatically.
 
 ### Default behavior (auto-sign)
 
@@ -691,7 +692,33 @@ By default, transactions are **signed, broadcast, and confirmed automatically**:
 5. CLI sends `confirmed` (or `failed` if reverted) to agent
 6. For multi-step flows (e.g. approval -> swap), the agent sends the next transaction and the cycle repeats
 
-**All transactions are auto-signed.** No manual approval is needed — the CLI handles payment signing, on-chain transaction signing, and multi-step flows (approvals, swaps, bridges) automatically.
+**All transactions are auto-signed by default.** No manual approval is needed — the CLI handles payment signing, on-chain transaction signing, and multi-step flows (approvals, swaps, bridges) automatically.
+
+### Manual approval mode (`--no-auto-sign-tx`)
+
+If you want to review transactions before signing:
+
+```bash
+~/teneo-skill/teneo command "<swap-agent-id>" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
+```
+
+When a transaction is requested:
+- The CLI **queues** it instead of signing
+- The transaction details are returned in the response (to, value, chainId, data, description)
+- You can then approve or reject:
+
+```bash
+# See what's waiting
+~/teneo-skill/teneo pending-txs
+
+# Approve a specific transaction
+~/teneo-skill/teneo approve-tx <taskId>
+
+# Reject a specific transaction
+~/teneo-skill/teneo reject-tx <taskId>
+```
+
+This is useful when an AI agent is executing commands on your behalf and you want to review on-chain actions before they happen.
 
 ---
 
@@ -699,11 +726,14 @@ By default, transactions are **signed, broadcast, and confirmed automatically**:
 
 1. **Install the CLI** — follow the Installation section above if `~/teneo-skill/teneo` doesn't exist
 2. **Ensure wallet is funded** — run `~/teneo-skill/teneo check-balance` to check USDC. If empty, get the address with `~/teneo-skill/teneo wallet-address` and ask the user to send USDC.
-3. **Discover agents** — run `~/teneo-skill/teneo list-agents` or `~/teneo-skill/teneo info <agentId>` to see commands and pricing
-4. **Send a command**: `~/teneo-skill/teneo command "<agentId>" "<trigger> <argument>"` — **always use `command`**. It handles everything: auto-resolves room, auto-adds agent, auto-pays, auto-signs transactions, auto-retries on different payment networks.
-5. **Swap agents** as needed — if an agent is dead, find an alternative.
+3. **Discover agents** — run `~/teneo-skill/teneo list-agents` or `~/teneo-skill/teneo list-agents --search "keyword"` to find the agent matching the user's request. **Use the user's exact search term** — don't substitute similar agents.
+4. **Check room membership** — run `~/teneo-skill/teneo room-agents <roomId>` to see which agents are in which rooms. This tells you if the target agent is already available and which room to use.
+5. **Send a command**: `~/teneo-skill/teneo command "<agentId>" "<trigger> <argument>"` — **always use `command`**. It handles everything: auto-resolves room, auto-adds agent, auto-pays, auto-signs transactions, auto-retries on different payment networks.
+6. **Swap agents** as needed — if an agent is dead, find an alternative.
 
 **IMPORTANT: Always use `command`.** It handles everything: payment, room management, agent autosummon, TX signing, multi-step flows (swaps, approvals, bridges), and payment network retry automatically.
+
+**NOTE: Examples in this document use generic placeholders like `<swap-agent-id>`.** Always run `list-agents --search "keyword"` to find the **exact agent the user asks for** — do not default to a specific agent just because it appears in an example. Multiple agents may serve the same purpose (e.g. cross-chain swaps); use the one the user requests.
 
 ### Agent Examples (auto-generated from live network)
 
@@ -838,7 +868,17 @@ Search agent descriptions and command triggers semantically. Check pricing to in
 ~/teneo-skill/teneo command "<agentId>" "<trigger> <argument>"
 ```
 
-Room is auto-resolved. Agent is auto-added if not in room. Payment is auto-signed. All on-chain transactions (swaps, bridges) are auto-signed. Payment network auto-retries if funds are insufficient on the default chain. No manual approval is ever needed.
+Room is auto-resolved. Agent is auto-added if not in room. Payment is auto-signed. All on-chain transactions (swaps, bridges) are auto-signed. Payment network auto-retries if funds are insufficient on the default chain.
+
+**All transactions (payments AND on-chain swaps/bridges) are auto-signed by default. Do NOT use `approve-tx` or `pending-txs` unless the user explicitly passed `--no-auto-sign-tx`.** The normal flow requires no manual approval — just run the command and wait for the result.
+
+Only if the user explicitly asks to review transactions before signing, use `--no-auto-sign-tx`:
+
+```bash
+~/teneo-skill/teneo command "<swap-agent-id>" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
+```
+
+Then show the pending TX details to the user and run `approve-tx <taskId>` or `reject-tx <taskId>`.
 
 **This command may take 10-30 seconds for paid agent queries. Wait for the complete response. Do not summarize or present results to the user until the command has exited and you have the full JSON output.**
 
