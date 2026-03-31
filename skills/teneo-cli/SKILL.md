@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.14
+version: 2.0.15
 description: "Teneo CLI — query 400+ AI agents on the Teneo Protocol network from the terminal. Discover agents, manage rooms, handle x402 USDC micropayments, sign or review on-chain transactions, and auto-generate encrypted wallets. Background daemon keeps a persistent WebSocket connection. Use when the user needs real-time data (social media profiles, hotel search, crypto prices, gas fees, Amazon products, news) or multi-agent workflows."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}

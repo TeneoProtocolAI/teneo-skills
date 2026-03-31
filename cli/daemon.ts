@@ -706,37 +706,17 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
       const roomAgents = await s.listRoomAgents(room);
       const agentInRoom = roomAgents.some((a: any) => a.agent_id === agent);
       if (!agentInRoom) {
-        // Try to find a better room first — one that already has the agent or has space
-        const allRooms = liveRooms(s);
-        let bestRoom: string | null = null;
-
-        for (const r of allRooms) {
-          if (r.id === room) continue; // already checked this one
-          try {
-            const agents = await s.listRoomAgents(r.id);
-            if (agents.some((a: any) => a.agent_id === agent)) {
-              bestRoom = r.id;
-              log(`Autosummon: found agent "${agent}" already in room "${r.id}"`);
-              break;
-            }
-          } catch { /* skip */ }
-        }
-
-        if (bestRoom) {
-          room = bestRoom;
-        } else {
-          // Agent not in any room — add to current room, swap if full
-          if (roomAgents.length >= 5) {
-            const toRemove = roomAgents.find((a: any) => a.agent_id !== agent) || roomAgents[0];
-            log(`Autosummon: room full, removing "${toRemove.agent_id || toRemove.id}" to make space`);
-            await s.removeAgentFromRoom(room, toRemove.agent_id || toRemove.id);
-            await sleep(1000);
-          }
-          log(`Autosummon: agent "${agent}" not in room, adding...`);
-          await s.addAgentToRoom(room, agent);
+        // Agent not in requested room — add it, swap if full
+        if (roomAgents.length >= 5) {
+          const toRemove = roomAgents.find((a: any) => a.agent_id !== agent) || roomAgents[0];
+          log(`Autosummon: room full, removing "${toRemove.agent_id || toRemove.id}" to make space`);
+          await s.removeAgentFromRoom(room, toRemove.agent_id || toRemove.id);
           await sleep(1000);
-          log(`Autosummon: agent "${agent}" added to room "${room}"`);
         }
+        log(`Autosummon: agent "${agent}" not in room, adding...`);
+        await s.addAgentToRoom(room, agent);
+        await sleep(1000);
+        log(`Autosummon: agent "${agent}" added to room "${room}"`);
       }
     } catch (checkErr: any) {
       log(`Autosummon check failed (non-fatal): ${checkErr.message}`);

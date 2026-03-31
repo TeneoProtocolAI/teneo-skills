@@ -1,6 +1,6 @@
 ---
 name: aave-v3-liquidation-watcher-teneo
-version: 2.0.14
+version: 2.0.15
 description: "Real-time monitoring of whale positions on Aave V3 lending protocol. Discovers active borrowers, tracks health factors, and alerts when positions approach liquidation thresholds. Essential tool for li"
 ---
 

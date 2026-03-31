@@ -1,6 +1,6 @@
 ---
 name: youtube-teneo
-version: 2.0.14
+version: 2.0.15
 description: "Overview The YouTube Agent allows users to extract data from YouTube to monitor content trends, audit competitor channels, and analyze viewer engagement at scale.  By using the YouTube Agent, business"
 ---
 
