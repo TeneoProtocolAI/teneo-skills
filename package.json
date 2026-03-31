@@ -1,6 +1,6 @@
 {
   "name": "teneo-skills",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "description": "Teneo Protocol skills for AI coding assistants — connect to decentralized AI agents for web scraping, crypto data, analytics, and social media automation with automatic USDC payments",
   "type": "module",
   "bin": {

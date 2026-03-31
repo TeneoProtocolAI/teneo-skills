@@ -1,10 +1,10 @@
 ---
-name: messari-btc-eth-tracker-teneo
+name: squid-router-teneo
 version: 2.0.13
-description: "Overview The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without manual searching or fragmented data sourc"
+description: "Squid Router Agent  Cross-chain token swap agent powered by Squid Router. Swap tokens across multiple blockchain networks with automatic route optimization.  Supported Chains  Ethereum, Arbitrum, Poly"
 ---
 
-# Messari BTC & ETH Tracker - powered by Teneo Protocol
+# Squid Router - powered by Teneo Protocol
 
 ## Purpose
 
@@ -20,22 +20,43 @@ See the `teneo-agent-deployment` skill to deploy a Go agent on Teneo Protocol an
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
 
-## Overview
-The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without manual searching or fragmented data sources.
+# Squid Router Agent
 
-By using the Messari Tracker Agent, traders, analysts, and researchers move beyond basic price tickers to gain:
+Cross-chain token swap agent powered by Squid Router. Swap tokens across multiple blockchain networks with automatic route optimization.
 
-- **Comprehensive Market Analytics:** Deep-dive details on cryptocurrency performance, including Price Action (Open, High, Low, Close), Market Cap, 24h Trading Volume, and Market Dominance.
-- **Institutional-Grade Data Accuracy:** High-fidelity data sourced directly from Messari, ensuring reliability for financial modeling.
-- **Performance & ROI Tracking:** Immediate access to ROI metrics across different timeframes (24h, 7d, 30d, 1y, YTD) and All-Time High (ATH) analytics.
-- **Supply & Network Mechanics:** Insights into circulating supply, total supply, and max supply limits.
+## Supported Chains
 
-Whether you are auditing a portfolio or building an automated trading pipeline, the Messari Tracker Agent delivers clean, structured datasets ready for immediate integration into your analytical tools.
+Ethereum, Arbitrum, Polygon, Base, Linea, Solana, Peaq, Avalanche
 
-## Core Functions
-The Agent supports specialized retrieval modes for cryptocurrency data:
+## Supported Tokens
 
-- **Coin Detail Extraction:** Retrieve deep-tier market metadata for Bitcoin (BTC) and Ethereum (ETH). This includes pricing in USD and BTC, ROI percentages, price action, supply metrics, and ATH statistics.
+ETH, WETH, USDC, USDT, SOL, PEAQ, MATIC, wAXL, AVAX, DOGE, PEPE, SHIB, TRX, ADA, AAVE, LINK, UNI, OKB
+
+*Note: Not all token pair combinations are available—only pairs with active liquidity pools on Squid Router can be swapped.*
+
+## Usage
+
+### Command Syntax
+
+```
+swap <amount> <fromToken> <fromChain> <toToken> <toChain>
+```
+
+### Examples
+
+```
+swap 1.5 ETH ethereum USDC ethereum
+swap 100 USDC polygon ETH arbitrum
+swap 0.5 ETH base USDC base
+```
+
+## How It Works
+
+1. Parses swap command and validates parameters
+2. Fetches optimal swap route from Squid Router
+3. For ERC20 tokens: Requests approval transaction, then automatically proceeds to swap
+4. For native tokens: Directly requests swap transaction
+5. Monitors transaction status and provides updates
 
 ## Commands
 
@@ -45,13 +66,13 @@ First, ensure the CLI is installed (see the teneo-cli skill for setup — the fu
 
 | Command | Arguments | Price | Description |
 |---------|-----------|-------|-------------|
-| `details` | <coin> | $0.0025/per-query | Extract coin details |
+| `swap` | <amount> <fromtoken> <fromchain> <totoken> <tochain> | $0.01/per-query | Execute cross-chain token swaps between supported chains and tokens. Automatically handles ERC20 token approvals and finds optimal swap routes. |
 
 ### Quick Reference
 
 ```bash
-# Agent ID: messaribtceth
-~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
+# Agent ID: squid-router
+~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 ```
 
 ## Setup
@@ -79,18 +100,18 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 
 ## Usage Examples
 
-### `details`
+### `swap`
 
-Extract coin details
+Execute cross-chain token swaps between supported chains and tokens. Automatically handles ERC20 token approvals and finds optimal swap routes.
 
 ```bash
-~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
+~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 ```
 
 Response is JSON. Extract the `humanized` field for formatted text.
 
 ## Agent Info
 
-- **ID:** `messaribtceth`
-- **Name:** Messari BTC & ETH Tracker
+- **ID:** `squid-router`
+- **Name:** Squid Router
 

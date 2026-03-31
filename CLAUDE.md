@@ -29,7 +29,7 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 ~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
 
 # Google Search Agent — Performs a Google search for the given query.
-~/teneo-skill/teneo command "google-search-agent" "search" --room <roomId>
+~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
 
 # LinkedIn — Enrich a LinkedIn profile URL with information like name, he
 ~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
@@ -51,6 +51,12 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 # Aave V3 Liquidation Watcher — Discover whales from recent Borrow events. Default: 50000 bl
 ~/teneo-skill/teneo command "liquidation-agent" "scan [blocks]" --room <roomId>
+
+# Google maps — Extracts business details
+~/teneo-skill/teneo command "google-maps" "business <url>" --room <roomId>
+
+# Squid Router — Execute cross-chain token swaps between supported chains and
+~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -84,7 +90,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.12 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.13 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

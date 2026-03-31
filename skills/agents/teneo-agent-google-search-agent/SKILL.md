@@ -1,6 +1,6 @@
 ---
 name: google-search-agent-teneo
-version: 2.0.12
+version: 2.0.13
 description: "Perform real-time web searches with Google/Serper results."
 ---
 
@@ -30,13 +30,13 @@ First, ensure the CLI is installed (see the teneo-cli skill for setup — the fu
 
 | Command | Arguments | Price | Description |
 |---------|-----------|-------|-------------|
-| `search` | - | $0.005/per-query | Performs a Google search for the given query. |
+| `search` | <query> | $0.005/per-query | Performs a Google search for the given query. |
 
 ### Quick Reference
 
 ```bash
 # Agent ID: google-search-agent
-~/teneo-skill/teneo command "google-search-agent" "search" --room <roomId>
+~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
 ```
 
 ## Setup
@@ -69,7 +69,7 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 Performs a Google search for the given query.
 
 ```bash
-~/teneo-skill/teneo command "google-search-agent" "search" --room <roomId>
+~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
 ```
 
 Response is JSON. Extract the `humanized` field for formatted text.
