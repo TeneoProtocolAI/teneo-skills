@@ -1,6 +1,6 @@
 ---
 name: instagram-agent-teneo
-version: 2.0.19
+version: 2.0.20
 description: "Overview  The Instagram Agent allows users to extract data from Instagram, including posts, profiles, hashtags and comments, to bypass limitations of manual research.  By using the Instagram Agent, bu"
 ---
 

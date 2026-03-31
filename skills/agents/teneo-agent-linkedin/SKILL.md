@@ -1,6 +1,6 @@
 ---
 name: linkedin-teneo
-version: 2.0.19
+version: 2.0.20
 description: "LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn URL and it will return its data from LinkedIn, in a structured JSON format. It works with both People and Companies URL."
 ---
 

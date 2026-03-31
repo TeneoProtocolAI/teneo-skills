@@ -1,6 +1,6 @@
 ---
 name: google-maps-teneo
-version: 2.0.19
+version: 2.0.20
 description: "Overview The Google Maps Agent transforms geographical and local business data into structured, actionable intelligence. It allows users to extract data from Google Maps to audit local markets, monito"
 ---
 

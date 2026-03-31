@@ -1,6 +1,6 @@
 ---
 name: x-platform-agent-teneo
-version: 2.0.19
+version: 2.0.20
 description: "Overview The X Agent mpowers businesses, researchers, and marketers to move beyond surface-level monitoring to gain a comprehensive understanding of brand sentiment, competitor strategies, and communi"
 ---
 
