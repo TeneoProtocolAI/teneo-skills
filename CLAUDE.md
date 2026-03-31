@@ -34,6 +34,9 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Google Search Agent — Performs a Google search for the given query.
 ~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
 
+# LayerZero — Swap tokens across chains. Fetches a quote from LayerZero, t
+~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
+
 # LinkedIn — Enrich a LinkedIn profile URL with information like name, he
 ~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
@@ -54,9 +57,6 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 # Youtube — The command lets you search for videos. Examples: /search ca
 ~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
-
-# LayerZero — Swap tokens across chains. Fetches a quote from LayerZero, t
-~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -90,7 +90,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.18 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.19 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

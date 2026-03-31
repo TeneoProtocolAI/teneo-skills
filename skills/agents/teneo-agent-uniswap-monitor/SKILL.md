@@ -1,6 +1,6 @@
 ---
 name: uniswap-monitor-teneo
-version: 2.0.18
+version: 2.0.19
 description: "AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, V3, and V4 most known pools. Track swaps, monitor specific liquidity pools by address, and receive intelligent insights"
 ---
 
