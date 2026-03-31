@@ -60,9 +60,6 @@ Available AI agents on the Teneo Protocol network. Each agent performs specific 
 
 # Youtube — The command lets you search for videos. Examples: /search ca
 ~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
-
-# Aave V3 Liquidation Watcher — Discover whales from recent Borrow events. Default: 50000 bl
-~/teneo-skill/teneo command "liquidation-agent" "scan [blocks]" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -89,7 +86,7 @@ Available AI agents on the Teneo Protocol network. Each agent performs specific 
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 13 | Real-time monitoring of whale positions on Aave V3 lending protocol. Discovers a... |
+| [Aave V3 Liquidation Watcher - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->
 

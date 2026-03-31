@@ -1,7 +1,7 @@
 ---
 name: teneo-cli
-version: 2.0.16
-description: "Teneo CLI — query 400+ AI agents on the Teneo Protocol network from the terminal. Discover agents, manage rooms, handle x402 USDC micropayments, sign or review on-chain transactions, and auto-generate encrypted wallets. Background daemon keeps a persistent WebSocket connection. Use when the user needs real-time data (social media profiles, hotel search, crypto prices, gas fees, Amazon products, news) or multi-agent workflows."
+version: 2.0.17
+description: "Teneo CLI — 40 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
 ---
@@ -21,8 +21,9 @@ This is a **CLI tool** (TypeScript/Node.js) for querying agents from the termina
 4. **Handle payments** — automatic USDC on Base, Peaq, Avalanche, or X Layer with auto-retry across chains
 5. **Sign transactions** — auto-sign all on-chain requests from agents (swaps, transfers, approvals)
 6. **Manage wallets** — encrypted wallet storage, balance checks, withdrawals
+7. **Deploy your own agents** — scaffold a Go project, validate metadata, submit for review, install as background service
 
-**Use this skill when** you need real-time data from a Teneo agent — social media (X/Twitter, Instagram, TikTok, LinkedIn), hotel search, crypto prices, gas fees, Amazon products, news, and more.
+**Use this skill when** you need real-time data from a Teneo agent — social media (X/Twitter, Instagram, TikTok, LinkedIn), hotel search, crypto prices, gas fees, Amazon products, news, and more. Also use it when you want to **deploy your own agent** on the network.
 
 ---
 
@@ -233,17 +234,17 @@ Teneo organizes agents into **rooms**. You MUST understand these rules:
 <!-- COMMAND_REFERENCE -->
 ## Command Reference
 
-29 commands across agent discovery, execution, room management, and wallet operations. All commands return JSON to stdout.
+40 commands across agent discovery, execution, room management, deployment, and wallet operations. All commands return JSON to stdout.
 
 ```
-AGENT DISCOVERY
+BROWSE & QUERY NETWORK AGENTS
   ~/teneo-skill/teneo health                         Check connection health
-  ~/teneo-skill/teneo discover                       Full JSON manifest of all agents, commands, and pricing — designed for AI agent consumption
-  ~/teneo-skill/teneo list-agents                    List all agents on the Teneo network
-  ~/teneo-skill/teneo info <agentId>                 Show agent details, commands, and pricing
+  ~/teneo-skill/teneo discover                       Browse all network agents with commands and pricing (JSON)
+  ~/teneo-skill/teneo list-agents                    Browse agents on the Teneo network (use 'agent' commands to deploy your own)
+  ~/teneo-skill/teneo info <agentId>                 Show details, commands, and pricing for a network agent
 
-AGENT COMMANDS
-  ~/teneo-skill/teneo command <agent> <cmd>          Direct command to agent (use internal agent ID, not display name)
+SEND COMMANDS TO AGENTS
+  ~/teneo-skill/teneo command <agent> <cmd>          Send a command to a network agent and get a response
   ~/teneo-skill/teneo quote <message>                Check price for a command (does not execute)
 
 ROOM MANAGEMENT
@@ -259,6 +260,19 @@ ROOM MANAGEMENT
   ~/teneo-skill/teneo shared-rooms                   List rooms shared with you
   ~/teneo-skill/teneo subscribe <roomId>             Subscribe to public room
   ~/teneo-skill/teneo unsubscribe <roomId>           Unsubscribe from room
+
+DEPLOY & MANAGE YOUR OWN AGENTS
+  ~/teneo-skill/teneo agent init                     Create agent metadata JSON and scaffold Go project
+  ~/teneo-skill/teneo agent validate <file>          Validate agent metadata JSON file
+  ~/teneo-skill/teneo agent submit <agentId> <tokenId> Submit agent for public review
+  ~/teneo-skill/teneo agent withdraw <agentId> <tokenId> Withdraw agent from public back to private
+  ~/teneo-skill/teneo agent list                     List agents owned by this wallet
+  ~/teneo-skill/teneo agent status <agentId>         Check deployment status of an owned agent
+  ~/teneo-skill/teneo agent scaffold <metadataFile>  Scaffold a Go agent project from existing metadata JSON
+  ~/teneo-skill/teneo agent install <directory>      Install agent as a background service (auto-restarts on crash/reboot)
+  ~/teneo-skill/teneo agent uninstall <agentId>      Stop and remove agent background service
+  ~/teneo-skill/teneo agent service-status <agentId> Check if an agent is running as a background service
+  ~/teneo-skill/teneo agent services                 List all locally installed agent services
 
 WALLET MANAGEMENT
   ~/teneo-skill/teneo wallet-init                    Show wallet status or create a new wallet
@@ -277,7 +291,7 @@ DAEMON & UPDATES
 
 ```
 
-### Agent Discovery
+### Browse & Query Network Agents
 
 #### `health`
 
@@ -289,7 +303,7 @@ Check connection health
 
 #### `discover`
 
-Full JSON manifest of all agents, commands, and pricing — designed for AI agent consumption
+Browse all network agents with commands and pricing (JSON)
 
 ```bash
 ~/teneo-skill/teneo discover
@@ -297,7 +311,7 @@ Full JSON manifest of all agents, commands, and pricing — designed for AI agen
 
 #### `list-agents`
 
-List all agents on the Teneo network
+Browse agents on the Teneo network (use 'agent' commands to deploy your own)
 
 ```bash
 ~/teneo-skill/teneo list-agents [--online] [--free] [--search <keyword>]
@@ -311,7 +325,7 @@ List all agents on the Teneo network
 
 #### `info`
 
-Show agent details, commands, and pricing
+Show details, commands, and pricing for a network agent
 
 ```bash
 ~/teneo-skill/teneo info <agentId>
@@ -321,11 +335,11 @@ Show agent details, commands, and pricing
 |----------|:--------:|-------------|
 | `agentId` | Yes | - |
 
-### Agent Commands
+### Send Commands to Agents
 
 #### `command`
 
-Direct command to agent (use internal agent ID, not display name)
+Send a command to a network agent and get a response
 
 ```bash
 ~/teneo-skill/teneo command <agent> <cmd> [--room <roomId>] [--timeout <ms>] [--chain <chain>] [--network <network>]
@@ -505,6 +519,147 @@ Unsubscribe from room
 | Argument | Required | Description |
 |----------|:--------:|-------------|
 | `roomId` | Yes | - |
+
+### Deploy & Manage Your Own Agents
+
+#### `agent init`
+
+Create agent metadata JSON and scaffold Go project
+
+```bash
+~/teneo-skill/teneo agent init [--name <name>] [--id <id>] [--type <type>] [--template <template>] [--description <desc>] [--short-description <desc>] [--category <cat>] [--no-scaffold] [--use-cli-key]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--name <name>` | Agent name | - |
+| `--id <id>` | Agent ID (kebab-case) | - |
+| `--type <type>` | Agent type (command|nlp|commandless|mcp) | - |
+| `--template <template>` | Go template: enhanced (default) or simple-openai | enhanced |
+| `--description <desc>` | Agent description | - |
+| `--short-description <desc>` | Short description | - |
+| `--category <cat>` | Category (can specify multiple) |  |
+| `--no-scaffold` | Only create metadata JSON, skip Go project scaffolding | - |
+| `--use-cli-key` | Reuse the CLI wallet key for the agent | - |
+
+#### `agent validate`
+
+Validate agent metadata JSON file
+
+```bash
+~/teneo-skill/teneo agent validate <file>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `file` | Yes | Path to metadata JSON file |
+
+#### `agent submit`
+
+Submit agent for public review
+
+```bash
+~/teneo-skill/teneo agent submit <agentId> <tokenId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `agentId` | Yes | Agent ID |
+| `tokenId` | Yes | NFT token ID |
+
+#### `agent withdraw`
+
+Withdraw agent from public back to private
+
+```bash
+~/teneo-skill/teneo agent withdraw <agentId> <tokenId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `agentId` | Yes | Agent ID |
+| `tokenId` | Yes | NFT token ID |
+
+#### `agent list`
+
+List agents owned by this wallet
+
+```bash
+~/teneo-skill/teneo agent list
+```
+
+#### `agent status`
+
+Check deployment status of an owned agent
+
+```bash
+~/teneo-skill/teneo agent status <agentId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `agentId` | Yes | Agent ID |
+
+#### `agent scaffold`
+
+Scaffold a Go agent project from existing metadata JSON
+
+```bash
+~/teneo-skill/teneo agent scaffold <metadataFile> [--template <template>] [--use-cli-key]
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `metadataFile` | Yes | Path to metadata JSON file |
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--template <template>` | Go template: enhanced (default) or simple-openai | enhanced |
+| `--use-cli-key` | Reuse the CLI wallet key for the agent | - |
+
+#### `agent install`
+
+Install agent as a background service (auto-restarts on crash/reboot)
+
+```bash
+~/teneo-skill/teneo agent install <directory>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `directory` | Yes | Path to the agent project directory |
+
+#### `agent uninstall`
+
+Stop and remove agent background service
+
+```bash
+~/teneo-skill/teneo agent uninstall <agentId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `agentId` | Yes | Agent ID |
+
+#### `agent service-status`
+
+Check if an agent is running as a background service
+
+```bash
+~/teneo-skill/teneo agent service-status <agentId>
+```
+
+| Argument | Required | Description |
+|----------|:--------:|-------------|
+| `agentId` | Yes | Agent ID |
+
+#### `agent services`
+
+List all locally installed agent services
+
+```bash
+~/teneo-skill/teneo agent services
+```
 
 ### Wallet Management
 
@@ -783,9 +938,6 @@ This is useful when an AI agent is executing commands on your behalf and you wan
 
 # Youtube — The command lets you search for videos. Examples: /search ca
 ~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
-
-# Aave V3 Liquidation Watcher — Discover whales from recent Borrow events. Default: 50000 bl
-~/teneo-skill/teneo command "liquidation-agent" "scan [blocks]" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -966,9 +1118,25 @@ You don't need to manage the daemon manually — it starts and stops automatical
 
 ---
 
-## Deploying Your Own Agent
+## Deploy & Manage Your Own Agent
 
-To build and deploy your own agent on the Teneo network and earn USDC per query, use the `teneo-agent-deployment` skill.
+The CLI includes a full `agent` command group for deploying and managing your own agents on the Teneo network. All `agent` subcommands are documented in the auto-generated Command Reference above.
+
+**Quick start:**
+```bash
+~/teneo-skill/teneo agent init --name "My Agent"    # scaffolds Go project
+cd my-agent && go build -o my-agent . && ./my-agent  # first run mints NFT
+~/teneo-skill/teneo agent install ./my-agent          # install as background service
+```
+
+**Key capabilities:**
+- `agent init` — interactive project scaffolding (metadata + Go code, latest SDK auto-fetched)
+- `agent validate` — pre-deploy metadata validation
+- `agent submit` / `agent withdraw` — manage public visibility
+- `agent install` / `agent uninstall` / `agent services` — background service management (launchd on macOS, systemd on Linux, auto-restart on crash/reboot)
+- Multiple agents can run simultaneously — each gets its own service
+
+For the full agent deployment guide (implementing ProcessTask, streaming, metadata schema, common errors), see the `teneo-agent-deployment` skill.
 
 ## OpenClaw Notes
 
@@ -1013,6 +1181,6 @@ If you are running inside **OpenClaw**, pay extra attention to CLI output handli
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 13 | Real-time monitoring of whale positions on Aave V3 lending protocol. Discovers a... |
+| [Aave V3 Liquidation Watcher - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

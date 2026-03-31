@@ -1112,6 +1112,34 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
     return { roomId, count: agents.length, agents: agents.map((a: any) => ({ id: a.agent_id || a.id, name: a.agent_name || a.name, status: a.is_online ? "online" : "offline" })) };
   },
 
+  // Agent deployment — filter agents by creator wallet
+  "my-agents": async (s, { walletAddress }) => {
+    const rawAgents = await fetchAgentsViaSDK(s);
+    const all = rawAgents.map(normalizeAgent);
+    const enriched = await enrichAgentsWithDetails(s, all);
+    // Filter by creator wallet if available in agent metadata
+    const owned = walletAddress
+      ? enriched.filter((a: any) => a.creator_wallet?.toLowerCase() === walletAddress.toLowerCase() || a.owner?.toLowerCase() === walletAddress.toLowerCase())
+      : enriched;
+    return { count: owned.length, agents: owned, wallet: walletAddress };
+  },
+
+  "my-agent-status": async (s, { agentId, walletAddress }) => {
+    const details = await getAgentDetailsLive(s, agentId);
+    if (details) {
+      const normalized = normalizeAgent(details);
+      const [enriched] = await enrichAgentsWithDetails(s, [normalized]);
+      return { ...enriched, visibility: (details as any).visibility || (details as any).status || "unknown" };
+    }
+    // Fallback to list search
+    const rawAgents = await fetchAgentsViaSDK(s);
+    const all = rawAgents.map(normalizeAgent);
+    const agent = all.find(a => a.agent_id === agentId);
+    if (!agent) return { error: `Agent "${agentId}" not found on network.` };
+    const [enriched] = await enrichAgentsWithDetails(s, [agent]);
+    return { ...enriched, visibility: (agent as any).visibility || "unknown" };
+  },
+
 };
 
 // ─── HTTP Server ─────────────────────────────────────────────────────────────

@@ -1,10 +1,10 @@
 ---
-name: google-search-agent-teneo
+name: aave-v3-liquidation-watcher-powered-by-teneo-protocol-teneo
 version: 2.0.17
-description: "Perform real-time web searches with Google/Serper results."
+description: "AI agent for Aave V3 Liquidation Watcher - powered by Teneo Protocol via Teneo Protocol"
 ---
 
-# Google Search Agent - powered by Teneo Protocol
+# Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol
 
 ## Purpose
 
@@ -19,25 +19,6 @@ description: "Perform real-time web searches with Google/Serper results."
 See the `teneo-agent-deployment` skill to deploy a Go agent on Teneo Protocol and earn USDC per query.
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
-
-Perform real-time web searches with Google/Serper results.
-
-## Commands
-
-Use these commands via the Teneo CLI from [TeneoProtocolAI/teneo-skills](https://github.com/TeneoProtocolAI/teneo-skills). **This is a bash tool** — run commands in your terminal.
-
-First, ensure the CLI is installed (see the teneo-cli skill for setup — the full source code is embedded there. Do NOT search for or install external CLIs).
-
-| Command | Arguments | Price | Description |
-|---------|-----------|-------|-------------|
-| `search` | <query> | $0.005/per-query | Performs a Google search for the given query. |
-
-### Quick Reference
-
-```bash
-# Agent ID: google-search-agent
-~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
-```
 
 ## Setup
 
@@ -62,20 +43,8 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 | Peaq | `eip155:3338` | `0xbbA60da06c2c5424f03f7434542280FCAd453d10` |
 | Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
 
-## Usage Examples
-
-### `search`
-
-Performs a Google search for the given query.
-
-```bash
-~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
-```
-
-Response is JSON. Extract the `humanized` field for formatted text.
-
 ## Agent Info
 
-- **ID:** `google-search-agent`
-- **Name:** Google Search Agent
+- **ID:** `aave-v3-liquidation-watcher`
+- **Name:** Aave V3 Liquidation Watcher - powered by Teneo Protocol
 

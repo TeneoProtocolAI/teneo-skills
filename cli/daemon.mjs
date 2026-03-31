@@ -910,6 +910,28 @@ var handlers = {
   "room-available-agents": async (s, { roomId }) => {
     const agents = await s.listAvailableAgents(roomId);
     return { roomId, count: agents.length, agents: agents.map((a) => ({ id: a.agent_id || a.id, name: a.agent_name || a.name, status: a.is_online ? "online" : "offline" })) };
+  },
+  // Agent deployment — filter agents by creator wallet
+  "my-agents": async (s, { walletAddress }) => {
+    const rawAgents = await fetchAgentsViaSDK(s);
+    const all = rawAgents.map(normalizeAgent);
+    const enriched = await enrichAgentsWithDetails(s, all);
+    const owned = walletAddress ? enriched.filter((a) => a.creator_wallet?.toLowerCase() === walletAddress.toLowerCase() || a.owner?.toLowerCase() === walletAddress.toLowerCase()) : enriched;
+    return { count: owned.length, agents: owned, wallet: walletAddress };
+  },
+  "my-agent-status": async (s, { agentId, walletAddress }) => {
+    const details = await getAgentDetailsLive(s, agentId);
+    if (details) {
+      const normalized = normalizeAgent(details);
+      const [enriched2] = await enrichAgentsWithDetails(s, [normalized]);
+      return { ...enriched2, visibility: details.visibility || details.status || "unknown" };
+    }
+    const rawAgents = await fetchAgentsViaSDK(s);
+    const all = rawAgents.map(normalizeAgent);
+    const agent = all.find((a) => a.agent_id === agentId);
+    if (!agent) return { error: `Agent "${agentId}" not found on network.` };
+    const [enriched] = await enrichAgentsWithDetails(s, [agent]);
+    return { ...enriched, visibility: agent.visibility || "unknown" };
   }
 };
 function readBody(req) {
