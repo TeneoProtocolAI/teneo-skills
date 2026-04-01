@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.27
+version: 2.0.28
 description: "Teneo CLI — 40 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -1059,6 +1059,19 @@ The `command` handler automatically resolves rooms, adds agents, swaps out agent
 ---
 
 ## Error Handling
+
+### `Exec approval is required` / `Exec denied` / `pairing required`
+
+**Cause:** The execution environment (e.g. OpenClaw gateway) requires manual approval for shell commands but no approval client is connected.
+
+**This is NOT a Teneo CLI issue.** Do NOT retry the command. Do NOT try alternative install methods. Tell the user:
+1. Their execution environment is blocking shell commands
+2. They need to connect an approval client (Web UI, terminal UI, Discord, Slack, or Telegram)
+3. Or they can run the commands directly in their own terminal — give them the exact commands to copy-paste
+
+**Do NOT keep retrying the same command or suggest workarounds like reinstalling. The problem is the environment, not the CLI.**
+
+---
 
 ### `agent not found or disconnected`
 **Cause:** Agent shows online but is disconnected in your room.
