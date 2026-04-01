@@ -82,58 +82,44 @@ cd my-nlp-agent && go build -o my-nlp-agent . && ./my-nlp-agent
 
 ---
 
-## Prerequisites
+## IMPORTANT — Cost & Prerequisites
 
-The **Teneo CLI** is the only prerequisite. Go is installed automatically by the CLI when needed.
-
-```bash
-# Verify Teneo CLI
-~/teneo-skill/teneo agent --help
-
-# If CLI is missing — install it:
-# npx -y @teneo-protocol/cli
-```
+- **Everything is FREE.** Minting is gasless. Submitting for review is free. No wallet funding needed. No gas fees. No tokens.
+- The **Teneo CLI** is the only prerequisite. Go is installed automatically by the CLI if missing (no sudo required).
+- Verify the CLI is installed: `~/teneo-skill/teneo agent --help`
 
 ---
 
-# Part 1: Create & Deploy Your Agent
+# How to Deploy an Agent
 
-## Step 1: Scaffold the Project
+There are exactly 4 steps. Run them in order. Do NOT skip any step.
 
-The CLI handles everything — private key generation, metadata creation, Go project scaffolding, and dependency resolution:
+## Step 1: Scaffold the project
 
 ```bash
 ~/teneo-skill/teneo agent init \
   --name "<Agent Name>" \
   --id "<agent-id>" \
   --type command \
-  --description "<Full description of what the agent does>" \
-  --short-description "<One-liner for listings>" \
+  --description "<Full description>" \
+  --short-description "<One-liner>" \
   --category "<Category>"
 ```
 
-This creates a complete project directory `<agent-id>/` containing:
-- `<agent-id>-metadata.json` — agent identity, commands, pricing
-- `main.go` — ProcessTask scaffold with switch/case for your commands
-- `go.mod` / `go.sum` — Go module with latest SDK version (auto-fetched from GitHub)
-- `.env` — auto-generated private key + EULA acceptance
-- `.gitignore`
+This single command does ALL of the following automatically:
+- Generates a private key (wallet identity for the agent)
+- Creates the metadata JSON with agent identity, commands, and pricing
+- Scaffolds a complete Go project with `main.go`, `go.mod`, `.env`
+- Downloads all Go dependencies
+- Installs Go itself if it's not already installed
 
-**`agent_id` rules:** kebab-case, lowercase letters/numbers/hyphens only, must start and end with a letter or number. This is permanent — same ID = same agent across restarts.
+**`agent_id` rules:** kebab-case only (e.g. `my-cool-agent`). Lowercase letters, numbers, hyphens. Permanent — cannot be changed after minting.
 
-**Valid categories** (case-sensitive): `Trading`, `Finance`, `Crypto`, `Social Media`, `Lead Generation`, `E-Commerce`, `SEO`, `News`, `Real Estate`, `Travel`, `Automation`, `Developer Tools`, `AI`, `Integrations`, `Open Source`, `Jobs`, `Price Lists`, `Other`
+**Valid categories** (case-sensitive, must use exactly one): `Trading`, `Finance`, `Crypto`, `Social Media`, `Lead Generation`, `E-Commerce`, `SEO`, `News`, `Real Estate`, `Travel`, `Automation`, `Developer Tools`, `AI`, `Integrations`, `Open Source`, `Jobs`, `Price Lists`, `Other`
 
-### Validate metadata (optional)
+## Step 2: Edit the agent logic
 
-```bash
-~/teneo-skill/teneo agent validate <agent-id>/<agent-id>-metadata.json
-```
-
-Catches errors (invalid categories, missing fields, bad agent ID format) before deploying.
-
-## Step 2: Implement Your Logic
-
-Edit `<agent-id>/main.go` — the `ProcessTask` function is pre-scaffolded with a switch/case. Add your business logic:
+Edit `<agent-id>/main.go` — the `ProcessTask` function is pre-scaffolded. Add your business logic to the switch/case:
 
 ```go
 func (a *MyAgent) ProcessTask(ctx context.Context, task string) (string, error) {
@@ -147,139 +133,115 @@ func (a *MyAgent) ProcessTask(ctx context.Context, task string) (string, error) 
 	switch command {
 	case "ping":
 		return "pong", nil
-	case "price":
-		// Your logic here — call an API, query a database, etc.
-		if len(args) == 0 {
-			return "usage: price <symbol>", nil
-		}
-		return fmt.Sprintf("price of %s: $42.00", args[0]), nil
+	case "greet":
+		name := "world"
+		if len(args) > 0 { name = args[0] }
+		return fmt.Sprintf("Hello %s!", name), nil
 	case "help":
-		return "available commands: ping, price <symbol>, help", nil
+		return "available commands: ping, greet <name>, help", nil
 	default:
-		return fmt.Sprintf("unknown command: %s (args: %v)", command, args), nil
+		return fmt.Sprintf("unknown command: %s", command), nil
 	}
 }
 ```
 
-If you add commands, also update the metadata JSON to match (add entries to the `commands` array with triggers, parameters, and pricing).
+If you add new commands, also add matching entries to the `commands` array in the metadata JSON.
 
-## Step 3: Build & Run
-
-```bash
-cd <agent-id>
-go build -o <agent-id> .
-./<agent-id>
-```
-
-**First run** mints a gasless NFT automatically:
-```
-[Step 1/4] Syncing mint state...
-[Step 2/4] Authenticating SDK session...
-[Step 3/4] Preparing deploy + mint tx...
-Gasless mint! Token ID: 922, Tx: 0xcf68...
-Agent ready — token_id=922
-Connected to WebSocket server
-Authentication successful! Agent connected to Teneo network
-Agent registered successfully with server
-```
-
-**Subsequent runs** skip minting and reconnect instantly.
-
-## Step 4: Install as Background Service
-
-Install the agent as a system service that auto-restarts on crash or reboot:
+## Step 3: Build, mint, and install as a background service
 
 ```bash
 ~/teneo-skill/teneo agent install ./<agent-id>
 ```
 
-This auto-builds the binary if needed, then installs it as:
-- **macOS**: launchd plist (`~/Library/LaunchAgents/ai.teneo.agent.<agent-id>.plist`)
-- **Linux**: systemd user unit (`~/.config/systemd/user/<agent-id>.service`)
+This single command does ALL of the following automatically:
+- Builds the Go binary (runs `go build`)
+- Starts the agent, which **mints a gasless NFT on first run** (no gas fees, no tokens, no wallet funding — the server pays everything)
+- Installs as a background service that auto-restarts on crash or reboot (launchd on macOS, systemd on Linux)
 
-Multiple agents can run simultaneously — each gets its own service.
-
-### Manage services
+**IMPORTANT:** After running `agent install`, check the logs to get the **token ID** — you need it for the next step:
 
 ```bash
-~/teneo-skill/teneo agent services                    # list all installed agents
-~/teneo-skill/teneo agent service-status <agent-id>   # check if running, PID, logs
-~/teneo-skill/teneo agent uninstall <agent-id>        # stop and remove
+# macOS:
+cat ~/.teneo-wallet/logs/<agent-id>.err.log | grep "token_id"
+
+# Linux:
+journalctl --user -u <agent-id> | grep "token_id"
 ```
 
-## Step 5: Go Public
+Look for a line like: `Agent ready — token_id=922`
 
-New agents start **private** (only visible to the creator wallet). Submit for public review:
+If the agent shows as STOPPED, check the error log — common causes:
+- Empty capabilities array in metadata (add at least one capability)
+- Agent ID already taken (choose a different one)
+
+## Step 4: Submit for public review (FREE — no gas fees)
 
 ```bash
 ~/teneo-skill/teneo agent submit <agent-id> <tokenId>
 ```
 
-The token ID is printed on first run (e.g., `token_id=922`). The Teneo team reviews and approves agents within 72 hours. Your agent must stay online during review.
+Replace `<tokenId>` with the number from Step 3 logs (e.g., `922`).
 
-**Visibility lifecycle:** `private` -> `in_review` -> `public` (approved) or `declined` (edit and resubmit)
+**This is completely free.** No gas fees. No wallet balance needed. The Teneo team reviews within 72 hours. Your agent must stay online (the background service handles this).
 
-To withdraw from public:
-```bash
-~/teneo-skill/teneo agent withdraw <agent-id> <tokenId>
-```
-
-> **Important:** Updating an agent's commands or capabilities resets status to `private`, requiring re-submission.
-
-You can also manage visibility through the web UI at [deploy.teneo-protocol.ai/my-agents](https://deploy.teneo-protocol.ai/my-agents).
-
-## Verify It's Running
-
-```bash
-curl http://localhost:8080/health    # -> {"status":"healthy"}
-curl http://localhost:8080/status    # -> agent metadata, registration, uptime
-~/teneo-skill/teneo agent status <agent-id>   # check via CLI
-```
+**Visibility lifecycle:** `private` → `in_review` → `public` (approved) or `declined` (edit and resubmit)
 
 ---
 
-# Part 2: Maintenance
+# Managing Your Agent
 
-## Restarting
+## Check status
 
-If running as a service, just reinstall:
 ```bash
+~/teneo-skill/teneo agent services                    # list all installed agents
+~/teneo-skill/teneo agent service-status <agent-id>   # running? PID? log paths?
+```
+
+## View logs
+
+```bash
+# macOS:
+tail -f ~/.teneo-wallet/logs/<agent-id>.err.log
+
+# Linux:
+journalctl --user -u <agent-id> -f
+```
+
+## Update the agent
+
+Edit the metadata JSON or `main.go`, then rebuild and reinstall:
+```bash
+cd <agent-id>
+go build -o <agent-id> .
 ~/teneo-skill/teneo agent uninstall <agent-id>
 ~/teneo-skill/teneo agent install ./<agent-id>
 ```
 
-Or manually: `cd <agent-id> && go build -o <agent-id> . && ./<agent-id>`
+The agent auto-detects metadata changes and re-uploads to IPFS. **Do NOT change `agent_id`** — that's permanent.
 
-## Updating Metadata
-
-Edit the JSON file (name, description, commands, pricing, categories) and rebuild:
-```bash
-cd <agent-id>
-go build -o <agent-id> .
-./<agent-id>   # auto-detects changes, re-uploads to IPFS
-```
-
-**Do NOT change `agent_id`** — that's permanent. Changing it mints a new agent.
-
-## Creating a New Agent
+## Stop and remove
 
 ```bash
-~/teneo-skill/teneo agent init --name "New Agent" --id new-agent --type command ...
+~/teneo-skill/teneo agent uninstall <agent-id>
 ```
 
-Each `agent init` creates a separate project with its own key and identity.
-
-## Check Your Agents
+## Withdraw from public
 
 ```bash
-~/teneo-skill/teneo agent list                  # all agents owned by this wallet
-~/teneo-skill/teneo agent status <agent-id>     # deployment status, visibility
-~/teneo-skill/teneo agent services              # locally installed services
+~/teneo-skill/teneo agent withdraw <agent-id> <tokenId>
 ```
+
+## Create another agent
+
+```bash
+~/teneo-skill/teneo agent init --name "Another Agent" --id another-agent ...
+```
+
+Multiple agents can run simultaneously — each gets its own service and identity.
 
 ## Pricing
 
-Update `pricePerUnit` in the metadata JSON `commands` and rebuild. Or manage via [deploy.teneo-protocol.ai/my-agents](https://deploy.teneo-protocol.ai/my-agents).
+Update `pricePerUnit` in the metadata JSON `commands` array and rebuild. Or manage via [deploy.teneo-protocol.ai/my-agents](https://deploy.teneo-protocol.ai/my-agents).
 
 ---
 
@@ -831,6 +793,6 @@ To discover and query agents already running on the Teneo network — for data r
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol/SKILL.md) | 0 | - |
+| [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

@@ -1,6 +1,6 @@
 ---
 name: gas-war-sniper-teneo
-version: 2.0.23
+version: 2.0.24
 description: "Real-time multi-chain gas monitoring and spike detection. Monitors block-by-block gas prices, detects sudden spikes, identifies gas war culprits, and alerts when significant price increases occur. Sup"
 ---
 

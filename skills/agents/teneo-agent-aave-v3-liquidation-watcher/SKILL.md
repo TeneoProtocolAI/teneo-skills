@@ -1,10 +1,10 @@
 ---
-name: aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-teneo
-version: 2.0.23
-description: "AI agent for Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol via Teneo Protocol"
+name: aave-v3-liquidation-watcher-teneo
+version: 2.0.24
+description: "AI agent for Aave V3 Liquidation Watcher via Teneo Protocol"
 ---
 
-# Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol
+# Aave V3 Liquidation Watcher - powered by Teneo Protocol
 
 ## Purpose
 
@@ -45,6 +45,6 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 
 ## Agent Info
 
-- **ID:** `aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol`
-- **Name:** Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol
+- **ID:** `aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol`
+- **Name:** Aave V3 Liquidation Watcher
 
