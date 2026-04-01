@@ -1,6 +1,6 @@
 ---
 name: squid-router-teneo
-version: 2.0.25
+version: 2.0.26
 description: "Squid Router Agent  Cross-chain token swap agent powered by Squid Router. Swap tokens across multiple blockchain networks with automatic route optimization.  Supported Chains  Ethereum, Arbitrum, Poly"
 ---
 
