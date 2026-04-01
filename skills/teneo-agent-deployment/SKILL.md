@@ -601,28 +601,6 @@ Beyond the basic fields shown in the guide, `EnhancedAgentConfig` supports:
 
 ## Common Errors
 
-### `Exec approval is required` / `Exec denied`
-
-**Cause**: The environment requires manual approval for shell commands but no approval client (Web UI, terminal, Discord, Slack, Telegram) is connected.
-
-**Fix**: This is NOT a Teneo issue — it's the execution environment's security policy. Tell the user:
-1. They need to connect an approval client (open the Web UI or terminal UI, or enable Discord/Slack/Telegram approvals)
-2. Or they can run the commands directly in their terminal themselves — give them the exact commands to copy-paste
-
-**Do NOT keep retrying the same command.** If exec is denied, provide the user with the commands they need to run manually.
-
----
-
-### `npx` not found or cannot install packages
-
-**Cause**: Node.js/npm is not installed or npx is blocked by the environment.
-
-**Fix**: The Teneo CLI requires Node.js 18+. If npx is unavailable:
-1. Check if the CLI is already installed: `test -f ~/teneo-skill/teneo && echo "INSTALLED"`
-2. If not, the user needs to install Node.js first, then run: `npx -y @teneo-protocol/cli`
-
----
-
 ### `PRIVATE_KEY environment variable is required`
 
 **Cause**: `PRIVATE_KEY` is not set in your `.env` file or not loaded.
