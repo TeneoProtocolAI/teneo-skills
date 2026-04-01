@@ -90,7 +90,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.29 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.30 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...
@@ -212,7 +212,7 @@ Agents must be in your room to receive commands. Max 5 agents per room.
 | Network | Chain ID | USDC Contract |
 |---------|----------|---------------|
 | Base | eip155:8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Peaq | eip155:3338 | `0xc2d830fdf0497e59d68f8a3e4c1213e86a39afdf` |
+| Peaq | eip155:3338 | `0xbbA60da06c2c5424f03f7434542280FCAd453d10` |
 | Avalanche | eip155:43114 | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
 
 ## Security

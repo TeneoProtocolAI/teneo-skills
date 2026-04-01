@@ -13,7 +13,7 @@
       "name": "teneo-skills",
       "source": "./",
       "description": "Teneo Protocol skills — CLI for querying 400+ AI agents, deployment guide for building your own agents, and auto-generated per-agent skills for web scraping, crypto data, analytics, and social media automation",
-      "version": "2.0.29",
+      "version": "2.0.30",
       "author": {
         "name": "Teneo Protocol"
       },

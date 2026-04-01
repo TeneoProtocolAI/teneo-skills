@@ -53,7 +53,7 @@ const CHAIN_TO_CAIP2: Record<string, string> = {
 
 const CHAIN_TO_USDC: Record<string, string> = {
   base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  peaq: "0xc2d830fdf0497e59d68f8a3e4c1213e86a39afdf",
+  peaq: "0xbbA60da06c2c5424f03f7434542280FCAd453d10",
   avalanche: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
   avax: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
   xlayer: "0x74b7F16337b8972027F6196A17a631aC6dE26d22",

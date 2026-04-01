@@ -1,6 +1,6 @@
 ---
 name: vc-attention-teneo
-version: 2.0.29
+version: 2.0.30
 description: "Overview The VC Attention Agent allows users to extract followings of top crypto VCs, including lists from Dragonfly, Paradigm, a16z, and more, to bypass manual mapping and identify where institutiona"
 ---
 
