@@ -13941,7 +13941,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.21").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.22").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 program.command("daemon").description("Manage the background daemon (start | stop | status)").argument("<action>", "start | stop | status").action(async (action) => {
   switch (action) {
     case "start": {
@@ -14300,6 +14300,60 @@ function toKebabCase(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 var agentCmd = program.command("agent").description("Deploy and manage YOUR OWN agents on the Teneo network");
+var GO_VERSION = "1.24.1";
+var GO_LOCAL_DIR = nodePath.join(WALLET_DIR, "go");
+async function ensureGo() {
+  const { execSync } = await import("node:child_process");
+  const localGoBin = nodePath.join(GO_LOCAL_DIR, "bin");
+  if (nodeFs.existsSync(localGoBin) && !process.env.PATH?.includes(localGoBin)) {
+    process.env.PATH = `${localGoBin}:${process.env.PATH}`;
+  }
+  try {
+    const gopath = execSync("go env GOPATH", { encoding: "utf8", stdio: "pipe", timeout: 5e3 }).trim();
+    if (gopath && !process.env.PATH?.includes(nodePath.join(gopath, "bin"))) {
+      process.env.PATH = `${nodePath.join(gopath, "bin")}:${process.env.PATH}`;
+    }
+  } catch {
+  }
+  try {
+    const version = execSync("go version", { encoding: "utf8", stdio: "pipe", timeout: 5e3 }).trim();
+    console.error(JSON.stringify({ info: version }));
+    return;
+  } catch {
+  }
+  console.error(JSON.stringify({ info: "Go not found \u2014 installing automatically (no sudo required)..." }));
+  const platform2 = nodeOs.platform();
+  const arch2 = nodeOs.arch();
+  const goArch = arch2 === "arm64" ? "arm64" : "amd64";
+  let tarUrl;
+  if (platform2 === "darwin") {
+    tarUrl = `https://go.dev/dl/go${GO_VERSION}.darwin-${goArch}.tar.gz`;
+  } else if (platform2 === "linux") {
+    tarUrl = `https://go.dev/dl/go${GO_VERSION}.linux-${goArch}.tar.gz`;
+  } else {
+    fail(`Cannot auto-install Go on ${platform2}. Install Go ${GO_VERSION}+ manually from https://go.dev/dl/`);
+    return;
+  }
+  try {
+    ensureWalletDir();
+    const tarPath = nodePath.join(WALLET_DIR, "go.tar.gz");
+    console.error(JSON.stringify({ info: `Downloading Go ${GO_VERSION}...` }));
+    execSync(`curl -fsSL "${tarUrl}" -o "${tarPath}"`, { stdio: "pipe", timeout: 12e4 });
+    if (nodeFs.existsSync(GO_LOCAL_DIR)) {
+      execSync(`rm -rf "${GO_LOCAL_DIR}"`, { stdio: "pipe" });
+    }
+    execSync(`tar -C "${WALLET_DIR}" -xzf "${tarPath}"`, { stdio: "pipe", timeout: 6e4 });
+    nodeFs.unlinkSync(tarPath);
+    process.env.PATH = `${localGoBin}:${process.env.PATH}`;
+    if (!process.env.GOPATH) {
+      process.env.GOPATH = nodePath.join(nodeOs.homedir(), "go");
+    }
+    const version = execSync("go version", { encoding: "utf8", stdio: "pipe", timeout: 5e3 }).trim();
+    console.error(JSON.stringify({ info: `Installed: ${version} (at ${GO_LOCAL_DIR})` }));
+  } catch (err) {
+    fail(`Failed to install Go: ${err.message}. Install manually from https://go.dev/dl/`);
+  }
+}
 var SDK_FALLBACK_VERSION = "v0.8.0";
 async function getLatestSDKVersion() {
   try {
@@ -14320,6 +14374,7 @@ async function getLatestSDKVersion() {
   return SDK_FALLBACK_VERSION;
 }
 async function scaffoldAgent(meta, opts) {
+  await ensureGo();
   const agentId = meta.agent_id || meta.agentId;
   const dir = agentId;
   if (nodeFs.existsSync(dir)) fail(`Directory "${dir}" already exists.`);
@@ -14758,6 +14813,7 @@ agentCmd.command("install").description("Install agent as a background service (
   if (!agentId) fail("agent_id not found in metadata JSON.");
   let binaryPath = nodePath.join(absDir, agentId);
   if (!nodeFs.existsSync(binaryPath)) {
+    await ensureGo();
     console.error(JSON.stringify({ info: `Binary not found, building with go build...` }));
     try {
       execSync(`go build -o ${agentId} .`, { cwd: absDir, stdio: "pipe", timeout: 12e4 });

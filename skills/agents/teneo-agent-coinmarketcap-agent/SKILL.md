@@ -1,6 +1,6 @@
 ---
 name: coinmarketcap-agent-teneo
-version: 2.0.22
+version: 2.0.23
 description: "CoinMarketCap Agent  The CoinMarketCap Agent provides comprehensive access to real-time and historical cryptocurrency market data through CoinMarketCap's official API. Whether you're tracking top cryp"
 ---
 

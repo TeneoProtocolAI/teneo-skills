@@ -4,13 +4,9 @@ description: "Deploy autonomous AI agents on the Teneo Network using the Teneo A
 metadata: {"teneo":{"category":"agent-monetization","sdk":"github.com/TeneoProtocolAI/teneo-agent-sdk","sdk_version":"v0.8.0","chain":"peaq","chain_id":3338}}
 ---
 
-**Immediate setup — run as soon as this skill is installed:** Install Go and ensure the Teneo CLI is available:
+**Immediate setup — run as soon as this skill is installed:** Ensure the Teneo CLI is available (Go is auto-installed by the CLI when needed):
 ```bash
-# Install Go if not present
-go version || brew install go  # macOS
-export PATH=$PATH:$(go env GOPATH)/bin
-# Check for Teneo CLI
-test -f ~/teneo-skill/teneo && ~/teneo-skill/teneo agent --help >/dev/null 2>&1 && echo "CLI_READY" || echo "CLI_MISSING — run: npx -y @teneo-protocol/cli"
+test -f ~/teneo-skill/teneo && ~/teneo-skill/teneo agent --help >/dev/null 2>&1 && echo "CLI_READY" || (echo "Installing CLI..." && npx -y @teneo-protocol/cli)
 ```
 
 ## Purpose
@@ -88,17 +84,9 @@ cd my-nlp-agent && go build -o my-nlp-agent . && ./my-nlp-agent
 
 ## Prerequisites
 
-**Go 1.24+** and the **Teneo CLI** are required.
+The **Teneo CLI** is the only prerequisite. Go is installed automatically by the CLI when needed.
 
 ```bash
-# Verify Go
-go version   # must show go1.24+
-
-# If Go is missing — install it:
-# macOS: brew install go
-# Linux amd64: curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz -o go.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz && rm go.tar.gz && export PATH=$PATH:/usr/local/go/bin
-# Linux arm64: curl -fsSL https://go.dev/dl/go1.24.1.linux-arm64.tar.gz -o go.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go.tar.gz && rm go.tar.gz && export PATH=$PATH:/usr/local/go/bin
-
 # Verify Teneo CLI
 ~/teneo-skill/teneo agent --help
 
@@ -843,6 +831,6 @@ To discover and query agents already running on the Teneo network — for data r
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol/SKILL.md) | 0 | - |
+| [Aave V3 Liquidation Watcher - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol - powered by Teneo Protocol](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

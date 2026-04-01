@@ -296,7 +296,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.22")
+program.name("teneo-cli").version("2.0.23")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 
@@ -698,6 +698,77 @@ function toKebabCase(name: string): string {
 
 const agentCmd = program.command("agent").description("Deploy and manage YOUR OWN agents on the Teneo network");
 
+// Ensure Go is installed — auto-install to ~/.teneo-wallet/go (no sudo required)
+const GO_VERSION = "1.24.1";
+const GO_LOCAL_DIR = nodePath.join(WALLET_DIR, "go");
+
+async function ensureGo(): Promise<void> {
+  const { execSync } = await import("node:child_process");
+
+  // Add local Go to PATH if it exists
+  const localGoBin = nodePath.join(GO_LOCAL_DIR, "bin");
+  if (nodeFs.existsSync(localGoBin) && !process.env.PATH?.includes(localGoBin)) {
+    process.env.PATH = `${localGoBin}:${process.env.PATH}`;
+  }
+  // Also ensure GOPATH/bin is in PATH for go-installed tools
+  try {
+    const gopath = execSync("go env GOPATH", { encoding: "utf8", stdio: "pipe", timeout: 5000 }).trim();
+    if (gopath && !process.env.PATH?.includes(nodePath.join(gopath, "bin"))) {
+      process.env.PATH = `${nodePath.join(gopath, "bin")}:${process.env.PATH}`;
+    }
+  } catch { /* go not found yet */ }
+
+  // Check if Go is already available
+  try {
+    const version = execSync("go version", { encoding: "utf8", stdio: "pipe", timeout: 5000 }).trim();
+    console.error(JSON.stringify({ info: version }));
+    return;
+  } catch { /* Go not found */ }
+
+  console.error(JSON.stringify({ info: "Go not found — installing automatically (no sudo required)..." }));
+  const platform = nodeOs.platform();
+  const arch = nodeOs.arch();
+  const goArch = arch === "arm64" ? "arm64" : "amd64";
+
+  let tarUrl: string;
+  if (platform === "darwin") {
+    tarUrl = `https://go.dev/dl/go${GO_VERSION}.darwin-${goArch}.tar.gz`;
+  } else if (platform === "linux") {
+    tarUrl = `https://go.dev/dl/go${GO_VERSION}.linux-${goArch}.tar.gz`;
+  } else {
+    fail(`Cannot auto-install Go on ${platform}. Install Go ${GO_VERSION}+ manually from https://go.dev/dl/`);
+    return; // unreachable but satisfies TS
+  }
+
+  try {
+    // Install to ~/.teneo-wallet/go — no sudo needed
+    ensureWalletDir();
+    const tarPath = nodePath.join(WALLET_DIR, "go.tar.gz");
+    console.error(JSON.stringify({ info: `Downloading Go ${GO_VERSION}...` }));
+    execSync(`curl -fsSL "${tarUrl}" -o "${tarPath}"`, { stdio: "pipe", timeout: 120000 });
+
+    // Remove old installation if present, extract new one
+    if (nodeFs.existsSync(GO_LOCAL_DIR)) {
+      execSync(`rm -rf "${GO_LOCAL_DIR}"`, { stdio: "pipe" });
+    }
+    execSync(`tar -C "${WALLET_DIR}" -xzf "${tarPath}"`, { stdio: "pipe", timeout: 60000 });
+    nodeFs.unlinkSync(tarPath);
+
+    // Add to PATH
+    process.env.PATH = `${localGoBin}:${process.env.PATH}`;
+
+    // Set GOPATH to userspace if not set
+    if (!process.env.GOPATH) {
+      process.env.GOPATH = nodePath.join(nodeOs.homedir(), "go");
+    }
+
+    const version = execSync("go version", { encoding: "utf8", stdio: "pipe", timeout: 5000 }).trim();
+    console.error(JSON.stringify({ info: `Installed: ${version} (at ${GO_LOCAL_DIR})` }));
+  } catch (err: any) {
+    fail(`Failed to install Go: ${err.message}. Install manually from https://go.dev/dl/`);
+  }
+}
+
 // Fetch latest Teneo Agent SDK version from GitHub, fallback to known version
 const SDK_FALLBACK_VERSION = "v0.8.0";
 async function getLatestSDKVersion(): Promise<string> {
@@ -720,6 +791,8 @@ async function getLatestSDKVersion(): Promise<string> {
 
 // Shared scaffold logic — used by both `agent init` and `agent scaffold`
 async function scaffoldAgent(meta: any, opts: { type: string; useCliKey: boolean }): Promise<{ dir: string; agentId: string; files: string[] }> {
+  await ensureGo();
+
   const agentId = meta.agent_id || meta.agentId;
   const dir = agentId;
 
@@ -1218,6 +1291,7 @@ agentCmd.command("install")
     // Find or build the binary
     let binaryPath = nodePath.join(absDir, agentId);
     if (!nodeFs.existsSync(binaryPath)) {
+      await ensureGo();
       console.error(JSON.stringify({ info: `Binary not found, building with go build...` }));
       try {
         execSync(`go build -o ${agentId} .`, { cwd: absDir, stdio: "pipe", timeout: 120000 });
