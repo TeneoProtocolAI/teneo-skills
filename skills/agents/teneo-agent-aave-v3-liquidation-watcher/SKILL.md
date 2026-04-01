@@ -1,6 +1,6 @@
 ---
 name: aave-v3-liquidation-watcher-teneo
-version: 2.0.24
+version: 2.0.25
 description: "AI agent for Aave V3 Liquidation Watcher via Teneo Protocol"
 ---
 
@@ -45,6 +45,6 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 
 ## Agent Info
 
-- **ID:** `aave-v3-liquidation-watcher-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol-powered-by-teneo-protocol`
+- **ID:** `aave-v3-liquidation-watcher`
 - **Name:** Aave V3 Liquidation Watcher
 
