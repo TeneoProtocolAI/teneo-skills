@@ -66,8 +66,6 @@ Available AI agents on the Teneo Protocol network. Each agent performs specific 
 
 | Agent | Commands | Description |
 |-------|:--------:|-------------|
-| [Teneo CLI](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-teneo-cli/SKILL.md) | 0 | - |
-| [Teneo Agent Deployment](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-teneo-agent-deployment/SKILL.md) | 0 | - |
 | [Amazon](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-amazon/SKILL.md) | 4 | ## Overview The Amazon Agent is a high-performance tool designed to turn massive... |
 | [Gas War Sniper](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-gas-war-sniper/SKILL.md) | 12 | Real-time multi-chain gas monitoring and spike detection. Monitors block-by-bloc... |
 | [Google maps](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-maps/SKILL.md) | 5 | ## Overview The Google Maps Agent transforms geographical and local business dat... |
