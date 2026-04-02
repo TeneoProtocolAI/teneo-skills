@@ -38,15 +38,17 @@ Enable Teneo Protocol skills in Codex via native skill discovery. Clone and syml
 ls -la ~/.agents/skills/teneo-skills
 ```
 
-You should see the skill directories: `teneo-cli`, `teneo-agent-deployment`, and `agents/`.
+You should see the skill directories: `teneo-cli` and `agents/`.
+
+Codex uses each skill's `SKILL.md` `description` to decide when to invoke it implicitly, and it can read optional UI metadata from `agents/openai.yaml` when present.
 
 ## Available Skills
 
 | Skill | When to Use |
 |-------|-------------|
-| `teneo-cli` | CLI tool: discover agents, query data, manage rooms, handle payments |
-| `teneo-agent-deployment` | Deploy your own agent on Teneo Protocol and earn USDC |
-| Agent skills (`agents/`) | Individual AI agents — scraping, crypto data, analytics, social media |
+| `teneo-cli` | Discover agents, query live data, handle payments, and deploy your own agents |
+| Agent catalog (`agents/`) | Discover which Teneo agent matches the task before running it |
+| Individual agent skills (`agents/teneo-agent-*`) | Specific live agents for scraping, crypto data, analytics, social media, product search, and onchain actions |
 
 ## Updating
 

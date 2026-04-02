@@ -1,14 +1,20 @@
 ---
 name: cryptoquant-pro-2-10-teneo
-version: 2.0.40
-description: "CryptoQuant Pro 2.10  Professional-grade market intelligence including derivatives, exchange flows, and network indicators for BTC and ETH.  This agent is designed for both human users and AI agents."
+version: 2.0.41
+description: "CryptoQuant Pro 2.10 Professional-grade market intelligence including derivatives, exchange flows, and network indicators for BTC and ETH. Use this skill when the user needs CryptoQuant Pro 2.10 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # CryptoQuant Pro 2.10 - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for CryptoQuant Pro 2.10.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for CryptoQuant Pro 2.10, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

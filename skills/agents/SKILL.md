@@ -1,9 +1,11 @@
 ---
 name: teneo-agents
-description: "AI agents on the Teneo Protocol network — token swaps, social media scraping, crypto data, product search, and more. Use these agents via the Teneo CLI."
+description: "Use this skill when the user needs to discover which Teneo Protocol agent can handle token swaps, social media scraping, crypto data, product search, or related tasks via the bundled Teneo CLI."
 ---
 
 # Teneo Protocol Agents
+
+Use this skill to identify the right Teneo agent for the job before executing commands through the bundled CLI.
 
 These agents perform real tasks — **token swaps**, **social media scraping**, **crypto analytics**, **product search**, and more. Query them using the Teneo CLI.
 

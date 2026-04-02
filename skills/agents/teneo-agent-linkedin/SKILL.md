@@ -1,14 +1,20 @@
 ---
 name: linkedin-teneo
-version: 2.0.40
-description: "LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn URL and it will return its data from LinkedIn, in a structured JSON format. It works with both People and Companies URL."
+version: 2.0.41
+description: "LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn URL and it will return its data from LinkedIn, in a structured JSON format. Use this skill when the user needs LinkedIn via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # LinkedIn - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for LinkedIn.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for LinkedIn, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

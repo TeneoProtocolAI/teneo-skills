@@ -1,14 +1,20 @@
 ---
 name: gas-war-sniper-teneo
-version: 2.0.40
-description: "Real-time multi-chain gas monitoring and spike detection. Monitors block-by-block gas prices, detects sudden spikes, identifies gas war culprits, and alerts when significant price increases occur. Sup"
+version: 2.0.41
+description: "Real-time multi-chain gas monitoring and spike detection. Use this skill when the user needs Gas War Sniper via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # Gas War Sniper - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for Gas War Sniper.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for Gas War Sniper, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

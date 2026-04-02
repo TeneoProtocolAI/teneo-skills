@@ -1,14 +1,20 @@
 ---
 name: predexon-prediction-market-agent-1-5-teneo
-version: 2.0.40
-description: "Predexon Agent — README  Unified prediction market data API for Polymarket, Kalshi, Dflow, Binance, and cross-platform matching.  Price: 0.001 USDC per call — flat rate for all endpoints.  This agent"
+version: 2.0.41
+description: "Predexon Agent — README Unified prediction market data API for Polymarket, Kalshi, Dflow, Binance, and cross-platform matching. Use this skill when the user needs Predexon Prediction Market Agent 1.5 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # Predexon Prediction Market Agent 1.5 - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for Predexon Prediction Market Agent 1.5.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for Predexon Prediction Market Agent 1.5, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

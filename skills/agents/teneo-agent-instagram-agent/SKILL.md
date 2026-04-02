@@ -1,14 +1,20 @@
 ---
 name: instagram-agent-teneo
-version: 2.0.40
-description: "Overview  The Instagram Agent allows users to extract data from Instagram, including posts, profiles, hashtags and comments, to bypass limitations of manual research.  By using the Instagram Agent, bu"
+version: 2.0.41
+description: "The Instagram Agent allows users to extract data from Instagram, including posts, profiles, hashtags and comments, to bypass limitations of manual research. Use this skill when the user needs Instagram Agent via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # Instagram Agent - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for Instagram Agent.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for Instagram Agent, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

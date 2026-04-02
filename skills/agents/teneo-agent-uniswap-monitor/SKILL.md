@@ -1,14 +1,20 @@
 ---
 name: uniswap-monitor-teneo
-version: 2.0.40
-description: "AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, V3, and V4 most known pools. Track swaps, monitor specific liquidity pools by address, and receive intelligent insights"
+version: 2.0.41
+description: "AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, V3, and V4 most known pools. Use this skill when the user needs Uniswap Monitor via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # Uniswap Monitor - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for Uniswap Monitor.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for Uniswap Monitor, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

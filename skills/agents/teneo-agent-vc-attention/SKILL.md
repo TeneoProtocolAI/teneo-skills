@@ -1,14 +1,20 @@
 ---
 name: vc-attention-teneo
-version: 2.0.40
-description: "Overview The VC Attention Agent allows users to extract followings of top crypto VCs, including lists from Dragonfly, Paradigm, a16z, and more, to bypass manual mapping and identify where institutiona"
+version: 2.0.41
+description: "The VC Attention Agent allows users to extract followings of top crypto VCs, including lists from Dragonfly, Paradigm, a16z, and more, to bypass manual. Use this skill when the user needs VC Attention via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # VC Attention - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for VC Attention.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for VC Attention, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Teneo CLI"
+  short_description: "Query live Teneo agents, handle USDC payments, and deploy your own agents."
+  default_prompt: "Use the bundled Teneo CLI at ~/teneo-skill/teneo. Verify install and health first, inspect the relevant agent or command, and execute the exact CLI workflow without using external tools."

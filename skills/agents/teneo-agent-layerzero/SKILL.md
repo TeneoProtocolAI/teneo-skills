@@ -1,14 +1,20 @@
 ---
 name: layerzero-teneo
-version: 2.0.40
-description: "Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports swapping tokens across EVM chains including Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, and more. Handles m"
+version: 2.0.41
+description: "Cross-chain token swap agent powered by LayerZero's Value Transfer API. Use this skill when the user needs LayerZero via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # LayerZero - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for LayerZero.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for LayerZero, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 

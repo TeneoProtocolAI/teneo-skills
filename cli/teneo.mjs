@@ -583,8 +583,23 @@ function validateMetadata(meta) {
   if (!agentType) errors.push({ field: "agent_type", message: "agent_type is required" });
   else if (!VALID_AGENT_TYPES.includes(agentType))
     errors.push({ field: "agent_type", message: `agent_type must be one of: ${VALID_AGENT_TYPES.join(", ")}` });
-  if (!meta.capabilities || !Array.isArray(meta.capabilities))
-    errors.push({ field: "capabilities", message: "capabilities array is required" });
+  if (!meta.capabilities || !Array.isArray(meta.capabilities) || meta.capabilities.length === 0) {
+    errors.push({ field: "capabilities", message: "at least one capability is required" });
+  } else {
+    for (let i = 0; i < meta.capabilities.length; i++) {
+      const capability = meta.capabilities[i];
+      if (!capability || typeof capability !== "object") {
+        errors.push({ field: `capabilities[${i}]`, message: "capability must be an object" });
+        continue;
+      }
+      if (!capability.name || typeof capability.name !== "string" || !capability.name.trim()) {
+        errors.push({ field: `capabilities[${i}].name`, message: "capability name is required" });
+      }
+      if (!capability.description || typeof capability.description !== "string" || !capability.description.trim()) {
+        errors.push({ field: `capabilities[${i}].description`, message: "capability description is required" });
+      }
+    }
+  }
   if (!meta.categories || !Array.isArray(meta.categories) || meta.categories.length === 0)
     errors.push({ field: "categories", message: "at least one category is required" });
   else {
@@ -620,6 +635,24 @@ function validateMetadata(meta) {
 }
 function toKebabCase(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+function buildDefaultCapabilities(agentId, categories, shortDescription) {
+  const capabilities = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const category of categories) {
+    const capabilityName = toKebabCase(category);
+    if (!capabilityName || seen.has(capabilityName)) continue;
+    seen.add(capabilityName);
+    capabilities.push({
+      name: capabilityName,
+      description: `Handles ${category.toLowerCase()} tasks. ${shortDescription}`.trim()
+    });
+  }
+  if (capabilities.length > 0) return capabilities;
+  return [{
+    name: agentId,
+    description: shortDescription || `Capability for ${agentId}`
+  }];
 }
 var agentCmd = program.command("agent").description("Deploy your own agents on the Teneo network");
 agentCmd.addHelpCommand(false);
@@ -960,13 +993,14 @@ Example:
     process.exit(1);
   }
   if (!agentId) agentId = toKebabCase(name);
+  const capabilities = buildDefaultCapabilities(agentId, categories, shortDescription);
   const metadata = {
     name,
     agent_id: agentId,
     short_description: shortDescription,
     description,
     agent_type: agentType,
-    capabilities: [],
+    capabilities,
     commands: agentType === "command" ? [
       {
         trigger: "help",
@@ -1006,7 +1040,7 @@ Example:
         directory: result.dir,
         files: result.files,
         next_steps: [
-          `Edit ${metaFile} to define your commands and pricing`,
+          `Edit ${metaFile} to define your commands, capabilities, and pricing`,
           `Edit ${result.dir}/main.go to implement your agent logic in ProcessTask`,
           `teneo agent deploy ./${result.dir}`,
           `teneo agent publish ${agentId}`
@@ -1024,6 +1058,7 @@ Created agent: ${agentId}
       console.log(`  What to do now:`);
       console.log(`  1. Edit ${metaFile}`);
       console.log(`     - Add your commands to the "commands" array (trigger, description, price)`);
+      console.log(`     - Refine the "capabilities" array so the backend can classify your agent correctly`);
       console.log(`     - Update the description and short_description`);
       console.log(``);
       console.log(`  2. Edit ${result.dir}/main.go`);
@@ -1046,7 +1081,7 @@ Created agent: ${agentId}
         agent_id: agentId,
         name,
         next_steps: [
-          `Edit ${filename} to add commands, pricing, description, and short_description`,
+          `Edit ${filename} to add commands, capabilities, pricing, description, and short_description`,
           `Run teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`
         ]
       });
@@ -1057,6 +1092,7 @@ Created agent metadata: ${filename}
       console.log(`  What to do now:`);
       console.log(`  1. Edit ${filename}`);
       console.log(`     - Add your commands to the "commands" array (trigger, description, price)`);
+      console.log(`     - Refine the "capabilities" array so the backend can classify your agent correctly`);
       console.log(`     - Update the description and short_description`);
       console.log(``);
       console.log(`  2. When ready to scaffold the Go project:`);
@@ -1287,6 +1323,33 @@ function getAgentLogPaths(agentId) {
     stderr: `${AGENT_LOG_DIR}/${agentId}.err.log`
   };
 }
+function getLogOffset(logFile) {
+  try {
+    return nodeFs.existsSync(logFile) ? nodeFs.readFileSync(logFile, "utf8").length : 0;
+  } catch {
+    return 0;
+  }
+}
+function readLogExcerpt(logFile, maxLines = 20, offset = 0) {
+  try {
+    if (!nodeFs.existsSync(logFile)) return null;
+    const content = nodeFs.readFileSync(logFile, "utf8");
+    const recent = offset > 0 ? content.slice(offset) : content;
+    const lines = recent.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0) return null;
+    return lines.slice(-maxLines).join("\n");
+  } catch {
+    return null;
+  }
+}
+function getStartupFailure(agentId, stderrOffset = 0) {
+  const logs = getAgentLogPaths(agentId);
+  const recentStderr = readLogExcerpt(logs.stderr, 20, stderrOffset);
+  if (!recentStderr) return null;
+  const lines = recentStderr.split("\n");
+  const fatalLine = [...lines].reverse().find((line) => /failed to prepare deploy:|panic:|fatal:/i.test(line));
+  return fatalLine || null;
+}
 async function getLocalServiceStatus(agentId) {
   const { execSync } = await import("node:child_process");
   const platform2 = nodeOs.platform();
@@ -1344,23 +1407,33 @@ async function deployAgent(directory) {
   const absDir = nodePath.resolve(directory);
   if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${directory}. Create an agent first: teneo agent init ${nodePath.basename(directory)}`);
   const meta = findMetadataInDir(absDir);
+  const metadataErrors = validateMetadata(meta);
+  if (metadataErrors.length > 0) {
+    if (JSON_FLAG) {
+      out({ status: "invalid", errors: metadataErrors });
+    } else {
+      console.error("Metadata validation failed:");
+      metadataErrors.forEach((error) => console.error(`  ${error.field}: ${error.message}`));
+    }
+    process.exit(1);
+  }
   const agentId = meta.agent_id || meta.agentId;
   if (!agentId) fail("agent_id not found in metadata JSON.");
-  let binaryPath = nodePath.join(absDir, agentId);
-  if (!nodeFs.existsSync(binaryPath)) {
-    await ensureGo();
-    console.error(JSON.stringify({ info: `Building ${agentId}...` }));
-    try {
-      execSync(`go build -o ${agentId} .`, { cwd: absDir, stdio: "pipe", timeout: 12e4 });
-      console.error(JSON.stringify({ info: "Build successful." }));
-    } catch (err) {
-      fail(`go build failed: ${err.stderr?.toString() || err.message}`);
-    }
+  const binaryPath = nodePath.join(absDir, agentId);
+  await ensureGo();
+  console.error(JSON.stringify({ info: `Building ${agentId}...` }));
+  try {
+    execSync(`go build -o "${binaryPath}" .`, { cwd: absDir, stdio: "pipe", timeout: 12e4 });
+    console.error(JSON.stringify({ info: "Build successful." }));
+  } catch (err) {
+    fail(`go build failed: ${err.stderr?.toString() || err.message}`);
   }
   if (!nodeFs.existsSync(binaryPath)) fail(`Binary not found at ${binaryPath} after build.`);
   if (!nodeFs.existsSync(AGENT_LOG_DIR)) {
     nodeFs.mkdirSync(AGENT_LOG_DIR, { recursive: true, mode: 448 });
   }
+  const logs = getAgentLogPaths(agentId);
+  const stderrOffset = getLogOffset(logs.stderr);
   const deployChain = resolveAgentDeployChain();
   if (platform2 === "darwin") {
     const plistPath = getMacPlistPath(agentId);
@@ -1388,7 +1461,14 @@ async function deployAgent(directory) {
   const tokenId = await waitForTokenId(agentId, 3e4);
   if (tokenId) saveTokenToRegistry(agentId, tokenId);
   const service = await getLocalServiceStatus(agentId);
-  const logs = getAgentLogPaths(agentId);
+  const startupFailure = getStartupFailure(agentId, stderrOffset);
+  if (startupFailure) fail(`Deploy failed during startup: ${startupFailure}. Check logs: ${logs.stderr}`);
+  if (service.status !== "running") {
+    const recentStderr = readLogExcerpt(logs.stderr, 20, stderrOffset);
+    fail(recentStderr ? `Deploy failed: service is ${service.status}.
+Recent stderr:
+${recentStderr}` : `Deploy failed: service is ${service.status}. Check logs: ${logs.stderr}`);
+  }
   const nextSteps = [
     `teneo agent publish ${agentId}`,
     `teneo agent status ${agentId}`,
@@ -1396,7 +1476,7 @@ async function deployAgent(directory) {
   ];
   if (JSON_FLAG) {
     out({
-      status: "deployed",
+      status: tokenId ? "deployed" : "starting",
       agentId,
       tokenId: tokenId || null,
       service,
@@ -1407,7 +1487,7 @@ async function deployAgent(directory) {
     return;
   }
   console.log(`
-Deployed: ${agentId}
+${tokenId ? "Deployed" : "Deployment started"}: ${agentId}
 `);
   if (tokenId) {
     console.log(`  NFT minted:  token #${tokenId} (free, gasless)`);
@@ -1417,8 +1497,12 @@ Deployed: ${agentId}
   console.log(`  Service:     ${service.status}${service.pid ? ` (PID ${service.pid})` : ""}`);
   console.log(`  Logs:        ${logs.stderr}`);
   console.log(``);
-  console.log(`  Your agent is live on the Teneo network.`);
-  console.log(`  Only you can see it right now (private).`);
+  if (tokenId) {
+    console.log(`  Your agent is live on the Teneo network.`);
+    console.log(`  Only you can see it right now (private).`);
+  } else {
+    console.log(`  The local service is running, but the NFT mint is still pending.`);
+  }
   console.log(``);
   console.log(`  To make it public:  teneo agent publish ${agentId}`);
   console.log(`  To check status:    teneo agent status ${agentId}`);

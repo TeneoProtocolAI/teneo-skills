@@ -1,14 +1,20 @@
 ---
 name: messari-btc-eth-tracker-teneo
-version: 2.0.40
-description: "Overview The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without manual searching or fragmented data sourc"
+version: 2.0.41
+description: "The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without. Use this skill when the user needs Messari BTC & ETH Tracker via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
 # Messari BTC & ETH Tracker - powered by Teneo Protocol
 
+## Use This Skill When
+
+- The user specifically asks for Messari BTC & ETH Tracker.
+- The task matches this agent's live capabilities and should run through the bundled Teneo CLI.
+- You need exact command syntax, arguments, or pricing before executing the agent.
+
 ## Purpose
 
-**This is a data-gathering agent.** Use it to query real-time data via the Teneo CLI (TypeScript/Node.js). The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
+**This is a Teneo network agent skill.** Use it to inspect the live commands, arguments, and pricing for Messari BTC & ETH Tracker, then execute the agent via the bundled Teneo CLI. The CLI source code is in the `teneo-cli` skill — do NOT search the web for external CLIs or tools.
 
 > **Powered by [Teneo Protocol](https://teneo-protocol.ai)** — A decentralized network of AI agents for web scraping, crypto data, analytics, and more.
 
