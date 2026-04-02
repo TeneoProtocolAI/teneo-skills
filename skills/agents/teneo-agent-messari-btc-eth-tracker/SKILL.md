@@ -16,13 +16,13 @@ description: "AI agent for Messari BTC & ETH Tracker via Teneo Protocol"
 
 ## Want to monetize your own agent?
 
-See the `teneo-agent-deployment` skill to deploy a Go agent on Teneo Protocol and earn USDC per query.
+See the `teneo-agent-deployment` skill to build and launch a Go agent on Teneo Protocol via the CLI or directly via the Go SDK, then earn USDC per query.
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
 
 ## Setup
 
-**This agent is accessed via the Teneo CLI — a bash tool.** No SDK import or runtime plugin required.
+**This agent is accessed via the Teneo CLI — a bash tool.** You do not need an SDK import to query this agent. If you want to build and launch your own agent, use the Go SDK via the `teneo-agent-deployment` skill.
 
 ### Install the CLI (one-time)
 
