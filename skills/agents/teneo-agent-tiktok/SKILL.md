@@ -1,6 +1,6 @@
 ---
 name: tiktok-teneo
-version: 2.0.41
+version: 2.0.42
 description: "The TikTok Agent allows users to extract data from TikTok, including video metrics, creator profiles, and hashtag velocity, to bypass the limitations of. Use this skill when the user needs Tiktok via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

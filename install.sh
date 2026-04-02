@@ -10,7 +10,7 @@ set -e
 #
 # What it does:
 #   1. Creates ~/teneo-skill/
-#   2. Copies teneo.ts and daemon.ts from the plugin's cli/ directory
+#   2. Copies teneo.ts, daemon.ts, and greetings.install.md from the plugin's cli/ directory
 #   3. Installs npm dependencies
 #   4. Creates a bash wrapper at ~/teneo-skill/teneo
 #
@@ -49,8 +49,8 @@ if [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
 fi
 
 # Verify source files
-if [ ! -f "$CLI_DIR/index.ts" ] || [ ! -f "$CLI_DIR/daemon.ts" ]; then
-  echo "Error: index.ts or daemon.ts not found in $CLI_DIR" >&2
+if [ ! -f "$CLI_DIR/index.ts" ] || [ ! -f "$CLI_DIR/daemon.ts" ] || [ ! -f "$CLI_DIR/greetings.install.md" ]; then
+  echo "Error: index.ts, daemon.ts, or greetings.install.md not found in $CLI_DIR" >&2
   exit 1
 fi
 
@@ -63,7 +63,8 @@ mkdir -p "$INSTALL_DIR"
 # Copy TypeScript source files
 cp "$CLI_DIR/index.ts" "$INSTALL_DIR/teneo.ts"
 cp "$CLI_DIR/daemon.ts" "$INSTALL_DIR/daemon.ts"
-echo "  Copied teneo.ts and daemon.ts"
+cp "$CLI_DIR/greetings.install.md" "$INSTALL_DIR/greetings.install.md"
+echo "  Copied teneo.ts, daemon.ts, and greetings.install.md"
 
 # Initialize npm and install dependencies
 cd "$INSTALL_DIR"
@@ -101,3 +102,11 @@ echo "  ~/teneo-skill/teneo health"
 echo "  ~/teneo-skill/teneo list-agents"
 echo "  ~/teneo-skill/teneo discover"
 echo ""
+if [ -f "$INSTALL_DIR/greetings.install.md" ]; then
+  sed \
+    -e 's/^### \{0,1\}//' \
+    -e 's/^## \{0,1\}//' \
+    -e 's/`//g' \
+    "$INSTALL_DIR/greetings.install.md"
+  echo ""
+fi

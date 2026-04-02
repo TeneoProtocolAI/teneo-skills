@@ -1,12 +1,31 @@
 ---
 name: teneo-cli
-version: 2.0.41
-description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection."
+version: 2.0.42
+description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection. Use this skill whenever the user needs real-time Teneo data, Teneo agent payments, or Teneo agent deployment."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
 ---
 
 # teneo-cli
+
+<!-- GREETING_INSTALL -->
+## Welcome From Teneo
+
+Welcome from the Teneo team. This CLI is the supported way to query live Teneo agents, handle payments, and deploy your own agents from coding assistants.
+
+### Wallet You Can Use
+
+- Fastest setup: use the auto-generated CLI wallet created on first use.
+- Existing wallet: set `TENEO_PRIVATE_KEY` to a dedicated EVM wallet private key.
+- Best practice: use a dedicated agent/payment wallet instead of a primary personal wallet.
+
+### Supported Networks
+
+- Base
+- Avalanche
+- Peaq
+- X Layer
+<!-- /GREETING_INSTALL -->
 
 ## Use This Skill When
 
@@ -48,6 +67,24 @@ Verify install and connectivity:
 ~/teneo-skill/teneo health --json
 ~/teneo-skill/teneo version
 ```
+
+## How To Inspect Everything The CLI Can Do
+
+Use these commands when the user wants the full CLI surface area instead of a single workflow:
+
+```bash
+~/teneo-skill/teneo --help
+~/teneo-skill/teneo agent --help
+~/teneo-skill/teneo --dump-commands
+```
+
+Guidance:
+
+- `--help` shows the top-level command groups and common usage.
+- `agent --help` shows the deployment and management subcommands.
+- `--dump-commands` returns the complete machine-readable command manifest.
+- The `COMMAND_REFERENCE` section later in this skill is generated from that manifest.
+- The embedded CLI source in this skill is the ground truth if behavior is unclear.
 
 ## Output Rules
 

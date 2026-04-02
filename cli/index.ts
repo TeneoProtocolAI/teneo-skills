@@ -32,6 +32,8 @@ import { fileURLToPath } from "node:url";
 
 const PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 const DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
+const CLI_FILE_DIR = nodePath.dirname(fileURLToPath(import.meta.url));
+const GREETING_INSTALL_FILE = nodePath.join(CLI_FILE_DIR, "greetings.install.md");
 
 // Build chain ID lookup from all viem-supported chains
 const CHAIN_BY_ID: Record<number, Chain> = {};
@@ -186,6 +188,30 @@ function normalizeDaemonError(error: string): string {
   return error;
 }
 
+function loadGreetingInstallMarkdown(): string {
+  try {
+    return nodeFs.readFileSync(GREETING_INSTALL_FILE, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function renderMarkdownForConsole(markdown: string): string {
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => {
+      let formatted = line;
+      if (line.startsWith("### ")) formatted = `  ${line.slice(4)}`;
+      else if (line.startsWith("## ")) formatted = `${line.slice(3)}`;
+      else if (line.startsWith("- ")) formatted = `  ${line}`;
+      return formatted.replace(/`/g, "");
+    })
+    .join("\n")
+    .trim();
+}
+
+const GREETING_INSTALL_TEXT = renderMarkdownForConsole(loadGreetingInstallMarkdown());
+
 function parseTokenId(value: string | undefined, source = "--token-id"): number | undefined {
   if (value === undefined) return undefined;
   const tokenId = Number(value);
@@ -225,16 +251,14 @@ function isDaemonRunning(): boolean {
 
 async function startDaemonSafe(): Promise<{ port?: number; error?: string }> {
   console.error(JSON.stringify({ info: "Starting daemon..." }));
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = nodePath.dirname(__filename);
 
   // Prefer pre-compiled .mjs (fast), fall back to .ts via tsx
-  const mjsPath = nodePath.join(__dirname, "daemon.mjs");
-  const tsPath = nodePath.join(__dirname, "daemon.ts");
+  const mjsPath = nodePath.join(CLI_FILE_DIR, "daemon.mjs");
+  const tsPath = nodePath.join(CLI_FILE_DIR, "daemon.ts");
   const usePrecompiled = nodeFs.existsSync(mjsPath);
   const child = usePrecompiled
-    ? spawn("node", [mjsPath], { detached: true, stdio: "ignore", cwd: __dirname, env: { ...process.env } })
-    : spawn("npx", ["tsx", tsPath], { detached: true, stdio: "ignore", cwd: __dirname, env: { ...process.env } });
+    ? spawn("node", [mjsPath], { detached: true, stdio: "ignore", cwd: CLI_FILE_DIR, env: { ...process.env } })
+    : spawn("npx", ["tsx", tsPath], { detached: true, stdio: "ignore", cwd: CLI_FILE_DIR, env: { ...process.env } });
   child.unref();
 
   // Poll /health until HTTP server is up (max 15s) — SDK connects lazily
@@ -322,9 +346,12 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.41")
+program.name("teneo-cli").version("2.0.42")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
+if (GREETING_INSTALL_TEXT) {
+  program.addHelpText("afterAll", `\n${GREETING_INSTALL_TEXT}\n`);
+}
 
 // ─── Daemon Control ─────────────────────────────────────────────────────────
 

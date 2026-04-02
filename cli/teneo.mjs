@@ -19,6 +19,8 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 var PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 var DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
+var CLI_FILE_DIR = nodePath.dirname(fileURLToPath(import.meta.url));
+var GREETING_INSTALL_FILE = nodePath.join(CLI_FILE_DIR, "greetings.install.md");
 var CHAIN_BY_ID = {};
 for (const key of Object.keys(allChains)) {
   const c = allChains[key];
@@ -144,6 +146,23 @@ function normalizeDaemonError(error) {
   }
   return error;
 }
+function loadGreetingInstallMarkdown() {
+  try {
+    return nodeFs.readFileSync(GREETING_INSTALL_FILE, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+function renderMarkdownForConsole(markdown) {
+  return markdown.split(/\r?\n/).map((line) => {
+    let formatted = line;
+    if (line.startsWith("### ")) formatted = `  ${line.slice(4)}`;
+    else if (line.startsWith("## ")) formatted = `${line.slice(3)}`;
+    else if (line.startsWith("- ")) formatted = `  ${line}`;
+    return formatted.replace(/`/g, "");
+  }).join("\n").trim();
+}
+var GREETING_INSTALL_TEXT = renderMarkdownForConsole(loadGreetingInstallMarkdown());
 function parseTokenId(value, source = "--token-id") {
   if (value === void 0) return void 0;
   const tokenId = Number(value);
@@ -181,12 +200,10 @@ function isDaemonRunning() {
 }
 async function startDaemonSafe() {
   console.error(JSON.stringify({ info: "Starting daemon..." }));
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = nodePath.dirname(__filename);
-  const mjsPath = nodePath.join(__dirname, "daemon.mjs");
-  const tsPath = nodePath.join(__dirname, "daemon.ts");
+  const mjsPath = nodePath.join(CLI_FILE_DIR, "daemon.mjs");
+  const tsPath = nodePath.join(CLI_FILE_DIR, "daemon.ts");
   const usePrecompiled = nodeFs.existsSync(mjsPath);
-  const child = usePrecompiled ? spawn("node", [mjsPath], { detached: true, stdio: "ignore", cwd: __dirname, env: { ...process.env } }) : spawn("npx", ["tsx", tsPath], { detached: true, stdio: "ignore", cwd: __dirname, env: { ...process.env } });
+  const child = usePrecompiled ? spawn("node", [mjsPath], { detached: true, stdio: "ignore", cwd: CLI_FILE_DIR, env: { ...process.env } }) : spawn("npx", ["tsx", tsPath], { detached: true, stdio: "ignore", cwd: CLI_FILE_DIR, env: { ...process.env } });
   child.unref();
   for (let i = 0; i < 30; i++) {
     await sleep(500);
@@ -262,7 +279,12 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.40").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.41").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+if (GREETING_INSTALL_TEXT) {
+  program.addHelpText("afterAll", `
+${GREETING_INSTALL_TEXT}
+`);
+}
 program.command("daemon").description("Manage the background daemon (start | stop | status)").argument("<action>", "start | stop | status").action(async (action) => {
   switch (action) {
     case "start": {
