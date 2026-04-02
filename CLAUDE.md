@@ -43,6 +43,12 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Messari BTC & ETH Tracker — Extract coin details
 ~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
 
+# Predexon Prediction Market Agent 1.5 — Execute any Predexon V2 API request and pay per query via x4
+~/teneo-skill/teneo command "predexon-prediction-market-agent-v5" "proxy <path>" --room <roomId>
+
+# Predexon Prediction Market Trading 1.5 — Create a new user account
+~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "create-user" --room <roomId>
+
 # Squid Router — Execute cross-chain token swaps between supported chains and
 ~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 
@@ -57,12 +63,6 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 # Youtube — The command lets you search for videos. Examples: /search ca
 ~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
-
-# Predexon Prediction Market Agent 1.5 — Execute any Predexon V2 API request and pay per query via x4
-~/teneo-skill/teneo command "predexon-prediction-market-agent-v5" "proxy <path>" --room <roomId>
-
-# Predexon Prediction Market Trading 1.5 — Create a new user account
-~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "create-user" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -96,7 +96,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.39 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.40 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

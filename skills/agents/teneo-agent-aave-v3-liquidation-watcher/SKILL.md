@@ -1,6 +1,6 @@
 ---
 name: aave-v3-liquidation-watcher-teneo
-version: 2.0.39
+version: 2.0.40
 description: "AI agent for Aave V3 Liquidation Watcher via Teneo Protocol"
 ---
 

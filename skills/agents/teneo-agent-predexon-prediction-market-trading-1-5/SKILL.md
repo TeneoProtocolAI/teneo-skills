@@ -1,6 +1,6 @@
 ---
 name: predexon-prediction-market-trading-1-5-teneo
-version: 2.0.39
+version: 2.0.40
 description: "Predexon Prediction Market Trading 1.5  Universal proxy for trading on Polymarket and Predict.fun. Mainly designed and optimized for autonomous agents (also available for humans via the Teneo Agent Co"
 ---
 

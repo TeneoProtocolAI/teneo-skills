@@ -1,6 +1,6 @@
 ---
 name: predexon-prediction-market-agent-1-5-teneo
-version: 2.0.39
+version: 2.0.40
 description: "Predexon Agent — README  Unified prediction market data API for Polymarket, Kalshi, Dflow, Binance, and cross-platform matching.  Price: 0.001 USDC per call — flat rate for all endpoints.  This agent"
 ---
 
