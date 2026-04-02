@@ -346,7 +346,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.42")
+program.name("teneo-cli").version("2.0.43")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -1322,12 +1322,33 @@ async function publishAgent(agentId: string, manualTokenId?: number) {
   const data = await res.json() as any;
   if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
 
+  const publishStatus = data.status || "submitted";
+
   if (JSON_FLAG) {
-    out({ status: "published", agentId, tokenId, ...data });
+    out({ status: publishStatus, agentId, tokenId, ...data });
   } else {
     console.log(`\nPublished: ${agentId}\n`);
-    console.log(`  Status:  pending review (typically approved within 72h)`);
-    console.log(`  Your agent will appear in the public Agent Console after review.\n`);
+
+    if (publishStatus === "no_changes") {
+      console.log(`  Status:  already in review; no metadata changes detected`);
+    } else if (publishStatus === "resubmitted_for_review") {
+      console.log(`  Status:  re-submitted for review with updated metadata`);
+    } else if (publishStatus === "already_public") {
+      console.log(`  Status:  already public`);
+    } else {
+      console.log(`  Status:  pending review (typically approved within 72h)`);
+    }
+
+    if (data.message) {
+      console.log(`  Note:    ${data.message}`);
+    }
+
+    if (publishStatus !== "already_public") {
+      console.log(`  Your agent will appear in the public Agent Console after review.\n`);
+    } else {
+      console.log("");
+    }
+
     console.log(`  To check status:    teneo agent status ${agentId}`);
     console.log(`  To unpublish:       teneo agent unpublish ${agentId}`);
     console.log(``);
