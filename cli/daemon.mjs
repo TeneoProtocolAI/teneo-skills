@@ -11,7 +11,8 @@ import {
   createWalletClient,
   createPublicClient,
   http as viemHttp,
-  defineChain
+  defineChain,
+  isAddress
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import * as allChains from "viem/chains";
@@ -81,6 +82,16 @@ var WALLET_FILE = nodePath.join(WALLET_DIR, "wallet.json");
 var SECRET_FILE = nodePath.join(WALLET_DIR, ".secret");
 var PID_FILE = nodePath.join(WALLET_DIR, "daemon.pid");
 var PORT_FILE = nodePath.join(WALLET_DIR, "daemon.port");
+var WALLET_VERSION = 1;
+var WalletConfigurationError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "WalletConfigurationError";
+  }
+};
+function buildWalletRecoveryMessage(reason) {
+  return `${reason} Fix or remove the wallet files in "${WALLET_DIR}", or run "teneo-cli wallet-init --force" to replace them.`;
+}
 var CHAIN_BY_ID = {};
 for (const key of Object.keys(allChains)) {
   const c = allChains[key];
@@ -100,11 +111,22 @@ function ensureWalletDir() {
   if (!nodeFs.existsSync(WALLET_DIR))
     nodeFs.mkdirSync(WALLET_DIR, { recursive: true, mode: 448 });
 }
-function getOrCreateMasterSecret() {
+function readMasterSecret(createIfMissing) {
   ensureWalletDir();
   if (nodeFs.existsSync(SECRET_FILE)) {
-    return Buffer.from(nodeFs.readFileSync(SECRET_FILE, "utf8").trim(), "hex");
+    const hex = nodeFs.readFileSync(SECRET_FILE, "utf8").trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet secret "${SECRET_FILE}" is invalid.`));
+    }
+    return Buffer.from(hex, "hex");
   }
+  if (!createIfMissing) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet secret "${SECRET_FILE}" is missing for the existing wallet.`));
+  }
+  return writeNewMasterSecret();
+}
+function writeNewMasterSecret() {
+  ensureWalletDir();
   const secret = nodeCrypto.randomBytes(32);
   nodeFs.writeFileSync(SECRET_FILE, secret.toString("hex"), { mode: 384 });
   nodeFs.chmodSync(SECRET_FILE, 384);
@@ -121,32 +143,64 @@ function encryptPK(pk, masterSecret) {
   const encrypted = Buffer.concat([cipher.update(pk, "utf8"), cipher.final()]);
   return { encryptedKey: encrypted.toString("base64"), iv: iv.toString("base64"), authTag: cipher.getAuthTag().toString("base64") };
 }
+function normalizeWalletData(data) {
+  if (!data || typeof data !== "object") {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is not a valid JSON object.`));
+  }
+  const wallet = data;
+  const version = wallet.version ?? WALLET_VERSION;
+  if (!Number.isInteger(version) || version < 1) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" has an unsupported version.`));
+  }
+  if (!wallet.address || typeof wallet.address !== "string" || !isAddress(wallet.address)) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is missing a valid address.`));
+  }
+  for (const field of ["encryptedKey", "iv", "authTag", "createdAt"]) {
+    if (!wallet[field] || typeof wallet[field] !== "string") {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is missing "${field}".`));
+    }
+  }
+  return {
+    version,
+    address: wallet.address,
+    encryptedKey: wallet.encryptedKey,
+    iv: wallet.iv,
+    authTag: wallet.authTag,
+    createdAt: wallet.createdAt
+  };
+}
 function loadWallet() {
   if (!nodeFs.existsSync(WALLET_FILE)) return null;
   try {
-    return JSON.parse(nodeFs.readFileSync(WALLET_FILE, "utf8"));
-  } catch {
-    return null;
+    return normalizeWalletData(JSON.parse(nodeFs.readFileSync(WALLET_FILE, "utf8")));
+  } catch (err) {
+    if (err instanceof WalletConfigurationError) throw err;
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" could not be read.`));
   }
 }
 function saveWallet(data) {
   ensureWalletDir();
-  nodeFs.writeFileSync(WALLET_FILE, JSON.stringify(data, null, 2), { mode: 384 });
+  nodeFs.writeFileSync(WALLET_FILE, JSON.stringify({ ...data, version: WALLET_VERSION }, null, 2), { mode: 384 });
   nodeFs.chmodSync(WALLET_FILE, 384);
 }
 function requireKey() {
   if (PRIVATE_KEY) return PRIVATE_KEY;
   const wallet = loadWallet();
   if (wallet) {
-    const secret2 = getOrCreateMasterSecret();
-    return decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret2);
+    const secret2 = readMasterSecret(false);
+    try {
+      return decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret2);
+    } catch {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage("Wallet decryption failed. The wallet secret does not match the stored wallet."));
+    }
   }
   log("No wallet found \u2014 generating a new one automatically...");
   const privateKey = nodeCrypto.randomBytes(32).toString("hex");
   const account = privateKeyToAccount(`0x${privateKey}`);
-  const secret = getOrCreateMasterSecret();
+  const secret = readMasterSecret(true);
   const encrypted = encryptPK(privateKey, secret);
   saveWallet({
+    version: WALLET_VERSION,
     address: account.address,
     encryptedKey: encrypted.encryptedKey,
     iv: encrypted.iv,
@@ -160,9 +214,21 @@ function requireKey() {
 var sdk = null;
 var lastActivity = Date.now();
 var startTime = Date.now();
+var lastConnectionError = null;
+var lastConnectionErrorName = null;
 function log(msg) {
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   console.error(`[daemon ${ts}] ${msg}`);
+}
+function recordConnectionError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  const name = err instanceof Error ? err.name : "Error";
+  lastConnectionError = message;
+  lastConnectionErrorName = name;
+}
+function clearConnectionError() {
+  lastConnectionError = null;
+  lastConnectionErrorName = null;
 }
 function buildSDK(key) {
   const normalizedKey = key.startsWith("0x") ? key : `0x${key}`;
@@ -255,17 +321,25 @@ async function ensureConnected() {
     }
     sdk = null;
   }
-  const key = requireKey();
+  let key;
+  try {
+    key = requireKey();
+  } catch (err) {
+    recordConnectionError(err);
+    throw err;
+  }
   const maxRetries = 5;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       sdk = buildSDK(key);
       await sdk.connect();
       registerTxSigner(sdk);
+      clearConnectionError();
       log("SDK connected");
       return sdk;
     } catch (err) {
       sdk = null;
+      recordConnectionError(err);
       if (attempt < maxRetries) {
         const delay = Math.min(attempt * 2e3, 1e4);
         log(`Connection failed (attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${delay / 1e3}s...`);
@@ -978,13 +1052,17 @@ var server = http.createServer(async (req, res) => {
       } catch {
       }
       const authenticated = sdkHealth?.connection?.authenticated || false;
+      const connected = sdkHealth ? sdkHealth.status !== "disconnected" : false;
+      const status = authenticated ? "ready" : connectingPromise ? "starting" : lastConnectionError ? "degraded" : connected ? "connected" : "starting";
       res.end(JSON.stringify({
-        status: "ok",
-        connected: !!sdk,
+        status,
+        connected,
         authenticated,
         uptime: Math.floor((Date.now() - startTime) / 1e3),
         pid: process.pid,
-        sdk_health: sdkHealth
+        sdk_health: sdkHealth,
+        last_connection_error: lastConnectionError,
+        last_connection_error_name: lastConnectionErrorName
       }));
       return;
     }

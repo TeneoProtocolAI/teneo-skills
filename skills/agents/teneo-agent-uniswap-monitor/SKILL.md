@@ -1,6 +1,6 @@
 ---
 name: uniswap-monitor-teneo
-version: 2.0.43
+version: 2.0.44
 description: "AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, V3, and V4 most known pools. Use this skill when the user needs Uniswap Monitor via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

@@ -17,6 +17,7 @@ import {
   createPublicClient,
   http,
   defineChain,
+  isAddress,
   type Chain,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -48,6 +49,7 @@ for (const key of Object.keys(allChains)) {
 const WALLET_DIR = nodePath.join(nodeOs.homedir(), ".teneo-wallet");
 const WALLET_FILE = nodePath.join(WALLET_DIR, "wallet.json");
 const SECRET_FILE = nodePath.join(WALLET_DIR, ".secret");
+const WALLET_VERSION = 1;
 
 interface WalletData {
   version: number;
@@ -58,16 +60,39 @@ interface WalletData {
   createdAt: string;
 }
 
+class WalletConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WalletConfigurationError";
+  }
+}
+
+function buildWalletRecoveryMessage(reason: string): string {
+  return `${reason} Fix or remove the wallet files in "${WALLET_DIR}", or run "teneo-cli wallet-init --force" to replace them.`;
+}
+
 function ensureWalletDir() {
   if (!nodeFs.existsSync(WALLET_DIR))
     nodeFs.mkdirSync(WALLET_DIR, { recursive: true, mode: 0o700 });
 }
 
-function getOrCreateMasterSecret(): Buffer {
+function readMasterSecret(createIfMissing: boolean): Buffer {
   ensureWalletDir();
   if (nodeFs.existsSync(SECRET_FILE)) {
-    return Buffer.from(nodeFs.readFileSync(SECRET_FILE, "utf8").trim(), "hex");
+    const hex = nodeFs.readFileSync(SECRET_FILE, "utf8").trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet secret "${SECRET_FILE}" is invalid.`));
+    }
+    return Buffer.from(hex, "hex");
   }
+  if (!createIfMissing) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet secret "${SECRET_FILE}" is missing for the existing wallet.`));
+  }
+  return writeNewMasterSecret();
+}
+
+function writeNewMasterSecret(): Buffer {
+  ensureWalletDir();
   const secret = nodeCrypto.randomBytes(32);
   nodeFs.writeFileSync(SECRET_FILE, secret.toString("hex"), { mode: 0o600 });
   nodeFs.chmodSync(SECRET_FILE, 0o600);
@@ -91,24 +116,59 @@ function decryptPK(encryptedKey: string, iv: string, authTag: string, masterSecr
   return Buffer.concat([decipher.update(Buffer.from(encryptedKey, "base64")), decipher.final()]).toString("utf8");
 }
 
+function normalizeWalletData(data: unknown): WalletData {
+  if (!data || typeof data !== "object") {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is not a valid JSON object.`));
+  }
+
+  const wallet = data as Partial<WalletData>;
+  const version = wallet.version ?? WALLET_VERSION;
+  if (!Number.isInteger(version) || version < 1) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" has an unsupported version.`));
+  }
+  if (!wallet.address || typeof wallet.address !== "string" || !isAddress(wallet.address)) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is missing a valid address.`));
+  }
+  for (const field of ["encryptedKey", "iv", "authTag", "createdAt"] as const) {
+    if (!wallet[field] || typeof wallet[field] !== "string") {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is missing "${field}".`));
+    }
+  }
+
+  return {
+    version,
+    address: wallet.address,
+    encryptedKey: wallet.encryptedKey,
+    iv: wallet.iv,
+    authTag: wallet.authTag,
+    createdAt: wallet.createdAt,
+  };
+}
+
 function loadWallet(): WalletData | null {
   if (!nodeFs.existsSync(WALLET_FILE)) return null;
-  try { return JSON.parse(nodeFs.readFileSync(WALLET_FILE, "utf8")); } catch { return null; }
+  try {
+    return normalizeWalletData(JSON.parse(nodeFs.readFileSync(WALLET_FILE, "utf8")));
+  } catch (err) {
+    if (err instanceof WalletConfigurationError) throw err;
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" could not be read.`));
+  }
 }
 
 function saveWallet(data: WalletData) {
   ensureWalletDir();
-  nodeFs.writeFileSync(WALLET_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
+  nodeFs.writeFileSync(WALLET_FILE, JSON.stringify({ ...data, version: WALLET_VERSION }, null, 2), { mode: 0o600 });
   nodeFs.chmodSync(WALLET_FILE, 0o600);
 }
 
-function autoCreateWallet(): { address: string; privateKey: string } {
+function autoCreateWallet(options: { resetSecret?: boolean } = {}): { address: string; privateKey: string } {
   console.error(JSON.stringify({ info: "No wallet found — generating a new one automatically..." }));
   const privateKey = nodeCrypto.randomBytes(32).toString("hex");
   const account = privateKeyToAccount(`0x${privateKey}` as `0x${string}`);
-  const secret = getOrCreateMasterSecret();
+  const secret = options.resetSecret ? writeNewMasterSecret() : readMasterSecret(true);
   const encrypted = encryptPK(privateKey, secret);
   saveWallet({
+    version: WALLET_VERSION,
     address: account.address,
     encryptedKey: encrypted.encryptedKey,
     iv: encrypted.iv,
@@ -121,12 +181,12 @@ function autoCreateWallet(): { address: string; privateKey: string } {
 }
 
 function getWalletAddress(): string {
-  const wallet = loadWallet();
-  if (wallet) return wallet.address;
   if (PRIVATE_KEY) {
     const key = PRIVATE_KEY.startsWith("0x") ? PRIVATE_KEY : `0x${PRIVATE_KEY}`;
     return privateKeyToAccount(key as `0x${string}`).address;
   }
+  const wallet = loadWallet();
+  if (wallet) return wallet.address;
   return autoCreateWallet().address;
 }
 
@@ -134,8 +194,12 @@ function requireKey(): string {
   if (PRIVATE_KEY) return PRIVATE_KEY;
   const wallet = loadWallet();
   if (wallet) {
-    const secret = getOrCreateMasterSecret();
-    return decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret);
+    const secret = readMasterSecret(false);
+    try {
+      return decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret);
+    } catch {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage("Wallet decryption failed. The wallet secret does not match the stored wallet."));
+    }
   }
   return autoCreateWallet().privateKey;
 }
@@ -211,12 +275,28 @@ function renderMarkdownForConsole(markdown: string): string {
 }
 
 const GREETING_INSTALL_TEXT = renderMarkdownForConsole(loadGreetingInstallMarkdown());
+const DAEMON_START_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.TENEO_DAEMON_START_TIMEOUT_MS);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 15_000;
+})();
 
 function parseTokenId(value: string | undefined, source = "--token-id"): number | undefined {
   if (value === undefined) return undefined;
   const tokenId = Number(value);
   if (!Number.isInteger(tokenId)) fail(`${source} must be a whole number`);
   return tokenId;
+}
+
+function parseUsdcAmount(amount: string): bigint {
+  if (!/^\d+(?:\.\d{1,6})?$/.test(amount)) {
+    fail("Invalid amount. Use a positive USDC amount with up to 6 decimal places.");
+  }
+
+  const [wholePart, fractionalPart = ""] = amount.split(".");
+  const normalizedFraction = fractionalPart.padEnd(6, "0");
+  const rawAmount = BigInt(wholePart) * 1_000_000n + BigInt(normalizedFraction);
+  if (rawAmount <= 0n) fail("Amount must be at least 0.000001 USDC.");
+  return rawAmount;
 }
 
 function pad(str: string, len: number): string {
@@ -237,16 +317,60 @@ const DAEMON_PID_FILE = nodePath.join(WALLET_DIR, "daemon.pid");
 const DAEMON_PORT_FILE = nodePath.join(WALLET_DIR, "daemon.port");
 
 function getDaemonPort(): number | null {
-  try { return parseInt(nodeFs.readFileSync(DAEMON_PORT_FILE, "utf8").trim()); }
+  try {
+    const port = Number.parseInt(nodeFs.readFileSync(DAEMON_PORT_FILE, "utf8").trim(), 10);
+    return Number.isInteger(port) && port > 0 ? port : null;
+  }
   catch { return null; }
+}
+
+function getDaemonPid(): number | null {
+  try {
+    const pid = Number.parseInt(nodeFs.readFileSync(DAEMON_PID_FILE, "utf8").trim(), 10);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
 }
 
 function isDaemonRunning(): boolean {
   try {
-    const pid = parseInt(nodeFs.readFileSync(DAEMON_PID_FILE, "utf8").trim());
+    const pid = getDaemonPid();
+    if (!pid) return false;
     process.kill(pid, 0);
     return true;
   } catch { return false; }
+}
+
+interface DaemonHealth {
+  status?: string;
+  authenticated?: boolean;
+  last_connection_error?: string | null;
+  last_connection_error_name?: string | null;
+}
+
+async function fetchDaemonHealth(port: number): Promise<DaemonHealth | null> {
+  try {
+    const res = await fetch(`http://localhost:${port}/health`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return null;
+    return await res.json() as DaemonHealth;
+  } catch {
+    return null;
+  }
+}
+
+async function stopDaemonBestEffort(port = getDaemonPort()): Promise<void> {
+  if (port) {
+    try {
+      await fetch(`http://localhost:${port}/stop`, { method: "POST", signal: AbortSignal.timeout(2000) });
+      await sleep(200);
+    } catch {}
+  }
+
+  const pid = getDaemonPid();
+  if (pid) {
+    try { process.kill(pid, "SIGTERM"); } catch {}
+  }
 }
 
 async function startDaemonSafe(): Promise<{ port?: number; error?: string }> {
@@ -261,21 +385,37 @@ async function startDaemonSafe(): Promise<{ port?: number; error?: string }> {
     : spawn("npx", ["tsx", tsPath], { detached: true, stdio: "ignore", cwd: CLI_FILE_DIR, env: { ...process.env } });
   child.unref();
 
-  // Poll /health until HTTP server is up (max 15s) — SDK connects lazily
-  for (let i = 0; i < 30; i++) {
+  let lastError: string | undefined;
+  const deadline = Date.now() + DAEMON_START_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
     await sleep(500);
     const port = getDaemonPort();
-    if (port) {
-      try {
-        const res = await fetch(`http://localhost:${port}/health`);
-        if (res.ok) {
-          console.error(JSON.stringify({ info: `Daemon ready on port ${port}` }));
-          return { port };
-        }
-      } catch { /* not ready yet */ }
+    if (!port) continue;
+
+    const health = await fetchDaemonHealth(port);
+    if (!health) continue;
+
+    if (health.authenticated) {
+      console.error(JSON.stringify({ info: `Daemon ready on port ${port}` }));
+      return { port };
+    }
+
+    if (health.last_connection_error) {
+      lastError = health.last_connection_error;
+      if (health.last_connection_error_name === "WalletConfigurationError") {
+        await stopDaemonBestEffort(port);
+        return { error: lastError };
+      }
     }
   }
-  return { error: "Daemon failed to start within 15 seconds." };
+
+  await stopDaemonBestEffort();
+  return {
+    error: lastError
+      ? `Daemon failed to authenticate within ${DAEMON_START_TIMEOUT_MS}ms. ${lastError}`
+      : `Daemon failed to authenticate within ${DAEMON_START_TIMEOUT_MS}ms.`,
+  };
 }
 
 async function startDaemon(): Promise<number> {
@@ -346,7 +486,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.43")
+program.name("teneo-cli").version("2.0.44")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -372,13 +512,21 @@ program.command("daemon")
       case "stop": {
         const port = getDaemonPort();
         if (!port || !isDaemonRunning()) { out({ status: "not_running" }); return; }
-        try { await fetch(`http://localhost:${port}/stop`, { method: "POST" }); } catch {}
+        await stopDaemonBestEffort(port);
         out({ status: "stopped" });
         break;
       }
       case "status": {
         const running = isDaemonRunning();
-        out({ status: running ? "running" : "stopped", port: getDaemonPort() });
+        const port = getDaemonPort();
+        const health = running && port ? await fetchDaemonHealth(port) : null;
+        out({
+          status: running ? "running" : "stopped",
+          port,
+          authenticated: health?.authenticated ?? false,
+          daemon_status: health?.status ?? null,
+          last_connection_error: health?.last_connection_error ?? null,
+        });
         break;
       }
       default:
@@ -565,22 +713,25 @@ program.command("wallet-init").description("Show wallet status or create a new w
   .option("--force", "Force create a new wallet even if one exists")
   .action(async (opts: any) => {
     if (!opts.force) {
+      if (PRIVATE_KEY) { out({ status: "env_var_set", note: "Private key found in environment." }); return; }
       const existing = loadWallet();
       if (existing) { out({ status: "exists", address: existing.address, createdAt: existing.createdAt }); return; }
-      if (PRIVATE_KEY) { out({ status: "env_var_set", note: "Private key found in environment." }); return; }
     }
-    const { address } = autoCreateWallet();
+    const { address } = autoCreateWallet({ resetSecret: !!opts.force });
     out({ status: "created", address, note: "New wallet generated. Fund with USDC to use paid agents." });
   });
 
 program.command("wallet-address").description("Show wallet public address")
   .action(async () => {
-    const wallet = loadWallet();
-    if (wallet) { out({ address: wallet.address, createdAt: wallet.createdAt }); }
-    else if (PRIVATE_KEY) {
+    if (PRIVATE_KEY) {
       const key = PRIVATE_KEY.startsWith("0x") ? PRIVATE_KEY : `0x${PRIVATE_KEY}`;
       out({ address: privateKeyToAccount(key as `0x${string}`).address, source: "environment_variable" });
-    } else {
+      return;
+    }
+
+    const wallet = loadWallet();
+    if (wallet) { out({ address: wallet.address, createdAt: wallet.createdAt }); }
+    else {
       const { address } = autoCreateWallet();
       out({ address, source: "auto_generated" });
     }
@@ -598,8 +749,13 @@ program.command("wallet-export-key").description("Export private key (DANGEROUS)
   .action(async () => {
     const wallet = loadWallet();
     if (!wallet) fail(PRIVATE_KEY ? "No wallet file. Key is in environment." : "No wallet. Run wallet-init first.");
-    const secret = getOrCreateMasterSecret();
-    const key = decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret);
+    const secret = readMasterSecret(false);
+    let key: string;
+    try {
+      key = decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret);
+    } catch {
+      fail(buildWalletRecoveryMessage("Wallet decryption failed. The wallet secret does not match the stored wallet."));
+    }
     console.error(JSON.stringify({ warning: "PRIVATE KEY EXPORTED. Never share this." }));
     out({ address: wallet.address, privateKey: key });
   });
@@ -638,10 +794,8 @@ program.command("wallet-balance").description("Check USDC and native token balan
 program.command("wallet-send").description("Send USDC to any address")
   .argument("<amount>", "Amount in USDC").argument("<to>", "Destination address").argument("<chain>", "Chain (base|avax|peaq|xlayer)")
   .action(async (amountStr: string, to: string, chainName: string) => {
-    const amount = parseFloat(amountStr);
-    if (isNaN(amount) || amount <= 0) fail("Invalid amount.");
-    if (!to.startsWith("0x") || to.length !== 42) fail("Invalid address. Must be 0x + 40 hex chars.");
-    const rawAmount = BigInt(Math.round(amount * 1e6));
+    const rawAmount = parseUsdcAmount(amountStr);
+    if (!isAddress(to)) fail("Invalid address. Must be a valid EVM address.");
     const chain = WALLET_CHAIN_MAP[chainName];
     const usdcAddr = USDC_ADDRESSES[chainName];
     if (!chain || !usdcAddr) fail(`Unknown chain: ${chainName}. Supported: base, avax, peaq, xlayer`);
@@ -818,11 +972,16 @@ Utilities:
 (agentCmd as any).helpInformation = () => `${agentHelpText}\n`;
 
 // ─── Token Registry ─────────────────────────────────────────────────────────
-// Stores token IDs locally so publish/unpublish don't need manual input.
+// Stores token IDs and local work dirs so publish/unpublish don't need manual input.
 
 const TOKEN_REGISTRY_FILE = nodePath.join(WALLET_DIR, "agent-tokens.json");
 
-function loadTokenRegistry(): Record<string, { token_id: number }> {
+interface AgentRegistryEntry {
+  token_id?: number;
+  work_dir?: string;
+}
+
+function loadTokenRegistry(): Record<string, AgentRegistryEntry> {
   try {
     if (nodeFs.existsSync(TOKEN_REGISTRY_FILE)) {
       return JSON.parse(nodeFs.readFileSync(TOKEN_REGISTRY_FILE, "utf8"));
@@ -831,11 +990,22 @@ function loadTokenRegistry(): Record<string, { token_id: number }> {
   return {};
 }
 
-function saveTokenToRegistry(agentId: string, tokenId: number): void {
+function saveAgentRegistryEntry(agentId: string, updates: AgentRegistryEntry): void {
   ensureWalletDir();
   const reg = loadTokenRegistry();
-  reg[agentId] = { token_id: tokenId };
+  reg[agentId] = { ...reg[agentId], ...updates };
   nodeFs.writeFileSync(TOKEN_REGISTRY_FILE, JSON.stringify(reg, null, 2));
+}
+
+function saveTokenToRegistry(agentId: string, tokenId: number, workDir?: string): void {
+  saveAgentRegistryEntry(agentId, {
+    token_id: tokenId,
+    ...(workDir ? { work_dir: workDir } : {}),
+  });
+}
+
+function saveWorkDirToRegistry(agentId: string, workDir: string): void {
+  saveAgentRegistryEntry(agentId, { work_dir: workDir });
 }
 
 function removeTokenFromRegistry(agentId: string): void {
@@ -1310,7 +1480,7 @@ agentCmd.command("validate")
 
 async function publishAgent(agentId: string, manualTokenId?: number) {
   const tokenId = await resolveTokenId(agentId, manualTokenId, "publish");
-  const key = requireKey();
+  const { key, source } = resolveAgentSigningKey(agentId);
   const hex = key.startsWith("0x") ? key : `0x${key}`;
   const address = privateKeyToAccount(hex as `0x${string}`).address;
 
@@ -1320,14 +1490,21 @@ async function publishAgent(agentId: string, manualTokenId?: number) {
     body: JSON.stringify({ creator_wallet: address, token_id: tokenId }),
   });
   const data = await res.json() as any;
-  if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const baseMessage = data.message || data.error || `HTTP ${res.status}`;
+    if (/wallet does not own this agent'?s nft/i.test(baseMessage)) {
+      fail(`${baseMessage}. Publish used ${source}. If this is the wrong wallet, run with TENEO_PRIVATE_KEY set to the wallet that minted the agent NFT, or deploy with --use-cli-key.`);
+    }
+    fail(baseMessage);
+  }
 
   const publishStatus = data.status || "submitted";
 
   if (JSON_FLAG) {
-    out({ status: publishStatus, agentId, tokenId, ...data });
+    out({ status: publishStatus, agentId, tokenId, wallet_source: source, ...data });
   } else {
     console.log(`\nPublished: ${agentId}\n`);
+    console.log(`  Wallet:  ${address} (${source})`);
 
     if (publishStatus === "no_changes") {
       console.log(`  Status:  already in review; no metadata changes detected`);
@@ -1357,7 +1534,7 @@ async function publishAgent(agentId: string, manualTokenId?: number) {
 
 async function unpublishAgent(agentId: string, manualTokenId?: number) {
   const tokenId = await resolveTokenId(agentId, manualTokenId, "unpublish");
-  const key = requireKey();
+  const { key, source } = resolveAgentSigningKey(agentId);
   const hex = key.startsWith("0x") ? key : `0x${key}`;
   const address = privateKeyToAccount(hex as `0x${string}`).address;
 
@@ -1367,10 +1544,20 @@ async function unpublishAgent(agentId: string, manualTokenId?: number) {
     body: JSON.stringify({ creator_wallet: address, token_id: tokenId }),
   });
   const data = await res.json() as any;
-  if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const baseMessage = data.message || data.error || `HTTP ${res.status}`;
+    if (/wallet does not own this agent'?s nft/i.test(baseMessage)) {
+      fail(`${baseMessage}. Unpublish used ${source}. If this is the wrong wallet, run with TENEO_PRIVATE_KEY set to the wallet that minted the agent NFT, or deploy with --use-cli-key.`);
+    }
+    fail(baseMessage);
+  }
 
-  if (JSON_FLAG) out({ status: "unpublished", agentId, tokenId, ...data });
-  else console.log(`\nUnpublished: ${agentId}\n`);
+  if (JSON_FLAG) out({ status: "unpublished", agentId, tokenId, wallet_source: source, ...data });
+  else {
+    console.log(`\nUnpublished: ${agentId}\n`);
+    console.log(`  Wallet:  ${address} (${source})`);
+    console.log(``);
+  }
 }
 
 agentCmd.command("publish")
@@ -1599,6 +1786,57 @@ function getStartupFailure(agentId: string, stderrOffset = 0): string | null {
   return fatalLine || null;
 }
 
+function getLocalServiceWorkDir(agentId: string): string | null {
+  const platform = nodeOs.platform();
+
+  try {
+    if (platform === "darwin") {
+      const plistPath = getMacPlistPath(agentId);
+      if (!nodeFs.existsSync(plistPath)) return null;
+      const plist = nodeFs.readFileSync(plistPath, "utf8");
+      const match = plist.match(/<key>WorkingDirectory<\/key>\s*<string>([^<]+)<\/string>/);
+      return match?.[1] || null;
+    }
+
+    if (platform === "linux") {
+      const unitPath = getLinuxUnitPath(agentId);
+      if (!nodeFs.existsSync(unitPath)) return null;
+      const unit = nodeFs.readFileSync(unitPath, "utf8");
+      const match = unit.match(/^WorkingDirectory=(.+)$/m);
+      return match?.[1]?.trim() || null;
+    }
+  } catch {}
+
+  return null;
+}
+
+function loadPrivateKeyFromEnvFile(workDir: string): string | null {
+  try {
+    const envPath = nodePath.join(workDir, ".env");
+    if (!nodeFs.existsSync(envPath)) return null;
+    const envText = nodeFs.readFileSync(envPath, "utf8");
+    const match = envText.match(/^PRIVATE_KEY\s*=\s*(.+)$/m);
+    if (!match) return null;
+    return match[1].trim().replace(/^['"]|['"]$/g, "");
+  } catch {
+    return null;
+  }
+}
+
+function resolveAgentSigningKey(agentId: string): { key: string; source: string } {
+  if (PRIVATE_KEY) return { key: PRIVATE_KEY, source: "TENEO_PRIVATE_KEY" };
+
+  const registryWorkDir = loadTokenRegistry()[agentId]?.work_dir;
+  const workDirs = [getLocalServiceWorkDir(agentId), registryWorkDir].filter(Boolean) as string[];
+
+  for (const workDir of workDirs) {
+    const key = loadPrivateKeyFromEnvFile(workDir);
+    if (key) return { key, source: `${workDir}/.env` };
+  }
+
+  return { key: requireKey(), source: "CLI wallet" };
+}
+
 async function getLocalServiceStatus(agentId: string): Promise<any> {
   const { execSync } = await import("node:child_process");
   const platform = nodeOs.platform();
@@ -1677,6 +1915,7 @@ async function deployAgent(directory: string) {
 
   const agentId = meta.agent_id || meta.agentId;
   if (!agentId) fail("agent_id not found in metadata JSON.");
+  saveWorkDirToRegistry(agentId, absDir);
 
   // Always rebuild on deploy so metadata or code changes are applied.
   const binaryPath = nodePath.join(absDir, agentId);
@@ -1885,7 +2124,7 @@ program.command("update").description("Update the Teneo CLI to the latest versio
     console.log("Updating Teneo CLI...");
     try {
       // Stop daemon before update
-      try { execSync("kill $(cat ~/.teneo-daemon.pid 2>/dev/null) 2>/dev/null", { stdio: "ignore" }); } catch {}
+      await stopDaemonBestEffort();
       execSync("npx -y @teneo-protocol/cli", { stdio: "inherit" });
     } catch (err: any) {
       console.error("Update failed:", err.message || err);

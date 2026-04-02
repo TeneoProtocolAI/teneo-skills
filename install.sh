@@ -82,8 +82,9 @@ NODE_OPTIONS="--max-old-space-size=512" npm install --prefer-offline \
   > /dev/null 2>&1
 echo "  Dependencies installed"
 
-# Create bash wrapper
-printf '#!/bin/bash\ncd ~/teneo-skill && exec npx tsx teneo.ts "$@"\n' > "$INSTALL_DIR/teneo"
+# Create bash wrapper without changing the caller's working directory.
+# This keeps relative paths like `agent deploy .` pointed at the user's agent folder.
+printf '#!/bin/bash\nexec npx tsx "%s/teneo.ts" "$@"\n' "$INSTALL_DIR" > "$INSTALL_DIR/teneo"
 chmod +x "$INSTALL_DIR/teneo"
 echo "  Created wrapper script"
 

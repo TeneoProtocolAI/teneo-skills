@@ -20,6 +20,7 @@ import {
   createPublicClient,
   http as viemHttp,
   defineChain,
+  isAddress,
   type Chain,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -118,6 +119,27 @@ const WALLET_FILE = nodePath.join(WALLET_DIR, "wallet.json");
 const SECRET_FILE = nodePath.join(WALLET_DIR, ".secret");
 const PID_FILE = nodePath.join(WALLET_DIR, "daemon.pid");
 const PORT_FILE = nodePath.join(WALLET_DIR, "daemon.port");
+const WALLET_VERSION = 1;
+
+interface WalletData {
+  version: number;
+  address: string;
+  encryptedKey: string;
+  iv: string;
+  authTag: string;
+  createdAt: string;
+}
+
+class WalletConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WalletConfigurationError";
+  }
+}
+
+function buildWalletRecoveryMessage(reason: string): string {
+  return `${reason} Fix or remove the wallet files in "${WALLET_DIR}", or run "teneo-cli wallet-init --force" to replace them.`;
+}
 
 // ─── Chain Config ────────────────────────────────────────────────────────────
 
@@ -145,11 +167,23 @@ function ensureWalletDir() {
     nodeFs.mkdirSync(WALLET_DIR, { recursive: true, mode: 0o700 });
 }
 
-function getOrCreateMasterSecret(): Buffer {
+function readMasterSecret(createIfMissing: boolean): Buffer {
   ensureWalletDir();
   if (nodeFs.existsSync(SECRET_FILE)) {
-    return Buffer.from(nodeFs.readFileSync(SECRET_FILE, "utf8").trim(), "hex");
+    const hex = nodeFs.readFileSync(SECRET_FILE, "utf8").trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet secret "${SECRET_FILE}" is invalid.`));
+    }
+    return Buffer.from(hex, "hex");
   }
+  if (!createIfMissing) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet secret "${SECRET_FILE}" is missing for the existing wallet.`));
+  }
+  return writeNewMasterSecret();
+}
+
+function writeNewMasterSecret(): Buffer {
+  ensureWalletDir();
   const secret = nodeCrypto.randomBytes(32);
   nodeFs.writeFileSync(SECRET_FILE, secret.toString("hex"), { mode: 0o600 });
   nodeFs.chmodSync(SECRET_FILE, 0o600);
@@ -169,14 +203,48 @@ function encryptPK(pk: string, masterSecret: Buffer) {
   return { encryptedKey: encrypted.toString("base64"), iv: iv.toString("base64"), authTag: cipher.getAuthTag().toString("base64") };
 }
 
-function loadWallet() {
-  if (!nodeFs.existsSync(WALLET_FILE)) return null;
-  try { return JSON.parse(nodeFs.readFileSync(WALLET_FILE, "utf8")); } catch { return null; }
+function normalizeWalletData(data: unknown): WalletData {
+  if (!data || typeof data !== "object") {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is not a valid JSON object.`));
+  }
+
+  const wallet = data as Partial<WalletData>;
+  const version = wallet.version ?? WALLET_VERSION;
+  if (!Number.isInteger(version) || version < 1) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" has an unsupported version.`));
+  }
+  if (!wallet.address || typeof wallet.address !== "string" || !isAddress(wallet.address)) {
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is missing a valid address.`));
+  }
+  for (const field of ["encryptedKey", "iv", "authTag", "createdAt"] as const) {
+    if (!wallet[field] || typeof wallet[field] !== "string") {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" is missing "${field}".`));
+    }
+  }
+
+  return {
+    version,
+    address: wallet.address,
+    encryptedKey: wallet.encryptedKey,
+    iv: wallet.iv,
+    authTag: wallet.authTag,
+    createdAt: wallet.createdAt,
+  };
 }
 
-function saveWallet(data: any) {
+function loadWallet(): WalletData | null {
+  if (!nodeFs.existsSync(WALLET_FILE)) return null;
+  try {
+    return normalizeWalletData(JSON.parse(nodeFs.readFileSync(WALLET_FILE, "utf8")));
+  } catch (err) {
+    if (err instanceof WalletConfigurationError) throw err;
+    throw new WalletConfigurationError(buildWalletRecoveryMessage(`Wallet file "${WALLET_FILE}" could not be read.`));
+  }
+}
+
+function saveWallet(data: WalletData) {
   ensureWalletDir();
-  nodeFs.writeFileSync(WALLET_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
+  nodeFs.writeFileSync(WALLET_FILE, JSON.stringify({ ...data, version: WALLET_VERSION }, null, 2), { mode: 0o600 });
   nodeFs.chmodSync(WALLET_FILE, 0o600);
 }
 
@@ -184,16 +252,21 @@ function requireKey(): string {
   if (PRIVATE_KEY) return PRIVATE_KEY;
   const wallet = loadWallet();
   if (wallet) {
-    const secret = getOrCreateMasterSecret();
-    return decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret);
+    const secret = readMasterSecret(false);
+    try {
+      return decryptPK(wallet.encryptedKey, wallet.iv, wallet.authTag, secret);
+    } catch {
+      throw new WalletConfigurationError(buildWalletRecoveryMessage("Wallet decryption failed. The wallet secret does not match the stored wallet."));
+    }
   }
   // Auto-generate wallet on first use
   log("No wallet found — generating a new one automatically...");
   const privateKey = nodeCrypto.randomBytes(32).toString("hex");
   const account = privateKeyToAccount(`0x${privateKey}` as `0x${string}`);
-  const secret = getOrCreateMasterSecret();
+  const secret = readMasterSecret(true);
   const encrypted = encryptPK(privateKey, secret);
   saveWallet({
+    version: WALLET_VERSION,
     address: account.address,
     encryptedKey: encrypted.encryptedKey,
     iv: encrypted.iv,
@@ -210,10 +283,24 @@ function requireKey(): string {
 let sdk: TeneoSDK | null = null;
 let lastActivity = Date.now();
 const startTime = Date.now();
+let lastConnectionError: string | null = null;
+let lastConnectionErrorName: string | null = null;
 
 function log(msg: string) {
   const ts = new Date().toISOString();
   console.error(`[daemon ${ts}] ${msg}`);
+}
+
+function recordConnectionError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  const name = err instanceof Error ? err.name : "Error";
+  lastConnectionError = message;
+  lastConnectionErrorName = name;
+}
+
+function clearConnectionError() {
+  lastConnectionError = null;
+  lastConnectionErrorName = null;
 }
 
 function buildSDK(key: string): TeneoSDK {
@@ -319,17 +406,27 @@ async function ensureConnected(): Promise<TeneoSDK> {
     try { sdk.disconnect(); } catch {}
     sdk = null;
   }
-  const key = requireKey();
+
+  let key: string;
+  try {
+    key = requireKey();
+  } catch (err) {
+    recordConnectionError(err);
+    throw err;
+  }
+
   const maxRetries = 5;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       sdk = buildSDK(key);
       await sdk.connect();
       registerTxSigner(sdk);
+      clearConnectionError();
       log("SDK connected");
       return sdk;
     } catch (err: any) {
       sdk = null;
+      recordConnectionError(err);
       if (attempt < maxRetries) {
         const delay = Math.min(attempt * 2000, 10000);
         log(`Connection failed (attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${delay / 1000}s...`);
@@ -1192,9 +1289,25 @@ const server = http.createServer(async (req, res) => {
       let sdkHealth = null;
       try { sdkHealth = sdk ? (sdk as any).getHealth() : null; } catch {}
       const authenticated = sdkHealth?.connection?.authenticated || false;
+      const connected = sdkHealth ? sdkHealth.status !== "disconnected" : false;
+      const status = authenticated
+        ? "ready"
+        : connectingPromise
+          ? "starting"
+          : lastConnectionError
+            ? "degraded"
+            : connected
+              ? "connected"
+              : "starting";
       res.end(JSON.stringify({
-        status: "ok", connected: !!sdk, authenticated, uptime: Math.floor((Date.now() - startTime) / 1000),
-        pid: process.pid, sdk_health: sdkHealth,
+        status,
+        connected,
+        authenticated,
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+        pid: process.pid,
+        sdk_health: sdkHealth,
+        last_connection_error: lastConnectionError,
+        last_connection_error_name: lastConnectionErrorName,
       }));
       return;
     }
