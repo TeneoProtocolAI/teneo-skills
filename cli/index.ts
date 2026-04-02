@@ -32,7 +32,6 @@ import { fileURLToPath } from "node:url";
 
 const PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 const DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
-const DEFAULT_CHAIN = process.env.TENEO_DEFAULT_CHAIN || "base";
 
 // Build chain ID lookup from all viem-supported chains
 const CHAIN_BY_ID: Record<number, Chain> = {};
@@ -323,7 +322,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.35")
+program.name("teneo-cli").version("2.0.36")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 
@@ -481,10 +480,12 @@ program.command("quote")
   .description("Check price for a command (does not execute)")
   .argument("<message>")
   .option("--room <roomId>")
-  .option("--chain <chain>")
+  .option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)")
+  .option("--network <network>", "Payment network (alias for --chain)")
   .action(async (message: string, opts: any) => {
     const room = await resolveRoom(opts.room);
-    out(await execViaDaemon("quote", { message, room, chain: opts.chain || DEFAULT_CHAIN }));
+    const chain = opts.chain || opts.network;
+    out(await execViaDaemon("quote", { message, room, chain }));
   });
 
 // ─── Room Management (via daemon) ──────────────────────────────────────────
@@ -1398,6 +1399,7 @@ agentCmd.command("logs")
 
 const AGENT_LOG_DIR = nodePath.join(WALLET_DIR, "logs");
 const SERVICE_LABEL_PREFIX = "ai.teneo.agent";
+const AGENT_DEPLOY_CHAIN = "peaq";
 
 function getServiceLabel(agentId: string): string {
   return `${SERVICE_LABEL_PREFIX}.${agentId}`;
@@ -1411,7 +1413,7 @@ function getLinuxUnitPath(agentId: string): string {
   return nodePath.join(nodeOs.homedir(), ".config", "systemd", "user", `${agentId}.service`);
 }
 
-function generateMacPlist(agentId: string, binaryPath: string, workDir: string): string {
+function generateMacPlist(agentId: string, binaryPath: string, workDir: string, deployChain: string): string {
   const logDir = AGENT_LOG_DIR;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1435,13 +1437,15 @@ function generateMacPlist(agentId: string, binaryPath: string, workDir: string):
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>TENEO_DEFAULT_CHAIN</key>
+        <string>${deployChain}</string>
     </dict>
 </dict>
 </plist>
 `;
 }
 
-function generateLinuxUnit(agentId: string, binaryPath: string, workDir: string): string {
+function generateLinuxUnit(agentId: string, binaryPath: string, workDir: string, deployChain: string): string {
   const logs = getAgentLogPaths(agentId);
   return `[Unit]
 Description=Teneo Agent: ${agentId}
@@ -1455,6 +1459,7 @@ WorkingDirectory=${workDir}
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TENEO_DEFAULT_CHAIN=${deployChain}
 StandardOutput=append:${logs.stdout}
 StandardError=append:${logs.stderr}
 
@@ -1522,6 +1527,10 @@ function findMetadataInDir(dir: string): any {
   return JSON.parse(raw);
 }
 
+function resolveAgentDeployChain() {
+  return AGENT_DEPLOY_CHAIN;
+}
+
 async function deployAgent(directory: string) {
   const { execSync } = await import("node:child_process");
   const platform = nodeOs.platform();
@@ -1554,6 +1563,7 @@ async function deployAgent(directory: string) {
   if (!nodeFs.existsSync(AGENT_LOG_DIR)) {
     nodeFs.mkdirSync(AGENT_LOG_DIR, { recursive: true, mode: 0o700 });
   }
+  const deployChain = resolveAgentDeployChain();
 
   if (platform === "darwin") {
     const plistPath = getMacPlistPath(agentId);
@@ -1562,14 +1572,14 @@ async function deployAgent(directory: string) {
 
     try { execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "pipe" }); } catch {}
 
-    nodeFs.writeFileSync(plistPath, generateMacPlist(agentId, binaryPath, absDir));
+    nodeFs.writeFileSync(plistPath, generateMacPlist(agentId, binaryPath, absDir, deployChain));
     execSync(`launchctl load "${plistPath}"`, { stdio: "pipe" });
   } else {
     const unitPath = getLinuxUnitPath(agentId);
     const unitDir = nodePath.dirname(unitPath);
     if (!nodeFs.existsSync(unitDir)) nodeFs.mkdirSync(unitDir, { recursive: true });
 
-    nodeFs.writeFileSync(unitPath, generateLinuxUnit(agentId, binaryPath, absDir));
+    nodeFs.writeFileSync(unitPath, generateLinuxUnit(agentId, binaryPath, absDir, deployChain));
 
     try { execSync("loginctl enable-linger $USER", { stdio: "pipe" }); } catch {}
 

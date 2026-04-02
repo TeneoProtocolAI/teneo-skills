@@ -1,6 +1,6 @@
 {
   "name": "teneo-skills",
-  "version": "2.0.35",
+  "version": "2.0.36",
   "skills": [
     "./skills/teneo-cli",
     "./skills/teneo-agent-deployment",
@@ -15,12 +15,12 @@
     "./skills/agents/teneo-agent-google-search-agent",
     "./skills/agents/teneo-agent-layerzero",
     "./skills/agents/teneo-agent-linkedin",
+    "./skills/agents/teneo-agent-messari-btc-eth-tracker",
     "./skills/agents/teneo-agent-squid-router",
+    "./skills/agents/teneo-agent-uniswap-monitor",
     "./skills/agents/teneo-agent-vc-attention",
     "./skills/agents/teneo-agent-x-platform-agent",
     "./skills/agents/teneo-agent-youtube",
-    "./skills/agents/teneo-agent-messari-btc-eth-tracker",
-    "./skills/agents/teneo-agent-uniswap-monitor",
     "./skills/agents/teneo-agent-aave-v3-liquidation-watcher"
   ],
   "keywords": [

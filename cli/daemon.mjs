@@ -19,7 +19,6 @@ import * as nodeCrypto from "node:crypto";
 var WS_URL = process.env.TENEO_WS_URL || "wss://backend.developer.chatroom.teneo-protocol.ai/ws";
 var PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 var DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
-var DEFAULT_CHAIN = process.env.TENEO_DEFAULT_CHAIN || "base";
 var DAEMON_PORT = parseInt(process.env.TENEO_DAEMON_PORT || "19876");
 var IDLE_TIMEOUT_MS = 10 * 60 * 1e3;
 var connectingPromise = null;
@@ -170,8 +169,8 @@ function buildSDK(key) {
   const builder = new SDKConfigBuilder().withWebSocketUrl(WS_URL).withAuthentication(normalizedKey).withReconnection({ enabled: true, delay: 3e3, maxAttempts: 5 }).withCache(true, 6e5, 500).withPayments({
     autoApprove: true,
     quoteTimeout: 12e4,
-    network: CHAIN_TO_CAIP2[DEFAULT_CHAIN] || "eip155:8453",
-    asset: CHAIN_TO_USDC[DEFAULT_CHAIN] || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    network: CHAIN_TO_CAIP2.base,
+    asset: CHAIN_TO_USDC.base
   });
   const config = builder.build();
   config.messageTimeout = 12e4;
@@ -879,7 +878,22 @@ var handlers = {
   },
   // Internal — not exposed as CLI commands, but available via daemon HTTP API
   "quote": async (s, { message, room, chain }) => {
-    const resolvedChain = CHAIN_TO_CAIP2[chain || DEFAULT_CHAIN] || chain || CHAIN_TO_CAIP2[DEFAULT_CHAIN];
+    const explicitChain = chain || null;
+    let preflightChain = null;
+    if (!explicitChain) {
+      const key = requireKey();
+      const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
+      const funded = await findFundedNetworks(account.address);
+      if (funded.length === 0) {
+        throw new Error("No funded networks found for quote. Set --chain or fund your wallet with USDC on a supported chain first.");
+      }
+      preflightChain = funded[0].chain;
+      log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
+    }
+    const resolvedChain = explicitChain ? CHAIN_TO_CAIP2[explicitChain] || explicitChain : preflightChain ? CHAIN_TO_CAIP2[preflightChain] || preflightChain : void 0;
+    if (!resolvedChain) {
+      throw new Error("Unable to resolve quote chain. Set --chain to a valid network (base|avax|peaq|xlayer).");
+    }
     const q = await s.requestQuote(message, room, resolvedChain);
     return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };
   },

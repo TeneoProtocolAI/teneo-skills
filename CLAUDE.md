@@ -40,8 +40,14 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # LinkedIn — Enrich a LinkedIn profile URL with information like name, he
 ~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
+# Messari BTC & ETH Tracker — Extract coin details
+~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
+
 # Squid Router — Execute cross-chain token swaps between supported chains and
 ~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
+
+# Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
+~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
 
 # VC Attention — get you an example of the output file
 ~/teneo-skill/teneo command "vc-attention" "getexamplefile" --room <roomId>
@@ -84,7 +90,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.35 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.36 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

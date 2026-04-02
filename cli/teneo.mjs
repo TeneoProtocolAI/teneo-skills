@@ -19,7 +19,6 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 var PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 var DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
-var DEFAULT_CHAIN = process.env.TENEO_DEFAULT_CHAIN || "base";
 var CHAIN_BY_ID = {};
 for (const key of Object.keys(allChains)) {
   const c = allChains[key];
@@ -263,7 +262,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.34").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.35").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 program.command("daemon").description("Manage the background daemon (start | stop | status)").argument("<action>", "start | stop | status").action(async (action) => {
   switch (action) {
     case "start": {
@@ -393,9 +392,10 @@ program.command("command").description("Send a command to a network agent and ge
   const chain = opts.chain || opts.network;
   out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout) }));
 });
-program.command("quote").description("Check price for a command (does not execute)").argument("<message>").option("--room <roomId>").option("--chain <chain>").action(async (message, opts) => {
+program.command("quote").description("Check price for a command (does not execute)").argument("<message>").option("--room <roomId>").option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)").option("--network <network>", "Payment network (alias for --chain)").action(async (message, opts) => {
   const room = await resolveRoom(opts.room);
-  out(await execViaDaemon("quote", { message, room, chain: opts.chain || DEFAULT_CHAIN }));
+  const chain = opts.chain || opts.network;
+  out(await execViaDaemon("quote", { message, room, chain }));
 });
 program.command("rooms").description("List all rooms").action(async () => {
   out(await execViaDaemon("rooms"));
@@ -1218,6 +1218,7 @@ agentCmd.command("logs").description("Tail agent logs").argument("<agentId>", "A
 });
 var AGENT_LOG_DIR = nodePath.join(WALLET_DIR, "logs");
 var SERVICE_LABEL_PREFIX = "ai.teneo.agent";
+var AGENT_DEPLOY_CHAIN = "peaq";
 function getServiceLabel(agentId) {
   return `${SERVICE_LABEL_PREFIX}.${agentId}`;
 }
@@ -1227,7 +1228,7 @@ function getMacPlistPath(agentId) {
 function getLinuxUnitPath(agentId) {
   return nodePath.join(nodeOs.homedir(), ".config", "systemd", "user", `${agentId}.service`);
 }
-function generateMacPlist(agentId, binaryPath, workDir) {
+function generateMacPlist(agentId, binaryPath, workDir, deployChain) {
   const logDir = AGENT_LOG_DIR;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1251,12 +1252,14 @@ function generateMacPlist(agentId, binaryPath, workDir) {
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>TENEO_DEFAULT_CHAIN</key>
+        <string>${deployChain}</string>
     </dict>
 </dict>
 </plist>
 `;
 }
-function generateLinuxUnit(agentId, binaryPath, workDir) {
+function generateLinuxUnit(agentId, binaryPath, workDir, deployChain) {
   const logs = getAgentLogPaths(agentId);
   return `[Unit]
 Description=Teneo Agent: ${agentId}
@@ -1270,6 +1273,7 @@ WorkingDirectory=${workDir}
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TENEO_DEFAULT_CHAIN=${deployChain}
 StandardOutput=append:${logs.stdout}
 StandardError=append:${logs.stderr}
 
@@ -1330,6 +1334,9 @@ function findMetadataInDir(dir) {
   const raw = nodeFs.readFileSync(nodePath.join(dir, files[0]), "utf8");
   return JSON.parse(raw);
 }
+function resolveAgentDeployChain() {
+  return AGENT_DEPLOY_CHAIN;
+}
 async function deployAgent(directory) {
   const { execSync } = await import("node:child_process");
   const platform2 = nodeOs.platform();
@@ -1354,6 +1361,7 @@ async function deployAgent(directory) {
   if (!nodeFs.existsSync(AGENT_LOG_DIR)) {
     nodeFs.mkdirSync(AGENT_LOG_DIR, { recursive: true, mode: 448 });
   }
+  const deployChain = resolveAgentDeployChain();
   if (platform2 === "darwin") {
     const plistPath = getMacPlistPath(agentId);
     const plistDir = nodePath.dirname(plistPath);
@@ -1362,13 +1370,13 @@ async function deployAgent(directory) {
       execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "pipe" });
     } catch {
     }
-    nodeFs.writeFileSync(plistPath, generateMacPlist(agentId, binaryPath, absDir));
+    nodeFs.writeFileSync(plistPath, generateMacPlist(agentId, binaryPath, absDir, deployChain));
     execSync(`launchctl load "${plistPath}"`, { stdio: "pipe" });
   } else {
     const unitPath = getLinuxUnitPath(agentId);
     const unitDir = nodePath.dirname(unitPath);
     if (!nodeFs.existsSync(unitDir)) nodeFs.mkdirSync(unitDir, { recursive: true });
-    nodeFs.writeFileSync(unitPath, generateLinuxUnit(agentId, binaryPath, absDir));
+    nodeFs.writeFileSync(unitPath, generateLinuxUnit(agentId, binaryPath, absDir, deployChain));
     try {
       execSync("loginctl enable-linger $USER", { stdio: "pipe" });
     } catch {
