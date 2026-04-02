@@ -855,6 +855,12 @@ Show installed and latest available version
 
 # Youtube — The command lets you search for videos. Examples: /search ca
 ~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+
+# Predexon Prediction Market Agent 1.5 — Execute any Predexon V2 API request and pay per query via x4
+~/teneo-skill/teneo command "predexon-prediction-market-agent-v5" "proxy <path>" --room <roomId>
+
+# Predexon Prediction Market Trading 1.5 — Create a new user account
+~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "create-user" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -883,5 +889,7 @@ Show installed and latest available version
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
 | [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
+| [Predexon Prediction Market Agent 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-agent-1-5/SKILL.md) | 1 | # Predexon Agent — README  Unified prediction market data API for Polymarket, Ka... |
+| [Predexon Prediction Market Trading 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-trading-1-5/SKILL.md) | 14 | # Predexon Prediction Market Trading 1.5  Universal proxy for trading on Polymar... |
 
 <!-- /AGENTS_LIST -->
