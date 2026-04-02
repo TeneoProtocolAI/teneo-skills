@@ -1,6 +1,6 @@
 ---
 name: layerzero-teneo
-version: 2.0.32
+version: 2.0.33
 description: "Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports swapping tokens across EVM chains including Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, and more. Handles m"
 ---
 

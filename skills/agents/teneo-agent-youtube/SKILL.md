@@ -1,6 +1,6 @@
 ---
 name: youtube-teneo
-version: 2.0.32
+version: 2.0.33
 description: "Overview The YouTube Agent allows users to extract data from YouTube to monitor content trends, audit competitor channels, and analyze viewer engagement at scale.  By using the YouTube Agent, business"
 ---
 
@@ -37,6 +37,25 @@ The Agent supports two primary retrieval and discovery modes:
 - **Advanced Video Search:** Query YouTube with granular control. Search by keywords and optionally sort results by Relevance, Upload Date, View Count, or Rating.
 - **Video Metadata Extraction:** Retrieve deep-tier metadata from specific video URLs, including channel names, descriptions, timestamps, view counts, and engagement metrics.
 
+## Commands
+
+Use these commands via the Teneo CLI from [TeneoProtocolAI/teneo-skills](https://github.com/TeneoProtocolAI/teneo-skills). **This is a bash tool** — run commands in your terminal.
+
+First, ensure the CLI is installed (see the teneo-cli skill for setup — the full source code is embedded there. Do NOT search for or install external CLIs).
+
+| Command | Arguments | Price | Description |
+|---------|-----------|-------|-------------|
+| `search` | <keyword> <sort_by> | $0.0025/per-query | The command lets you search for videos. Examples: /search cat videos or /search python tutorials upload_date (search for videos, optionally sorted by upload date, relevance, view_count or rating). |
+| `video` | <link> | $0.0025/per-query | The command lets you extract YouTube video metadata. Examples: /video https://www.youtube.com/watch?v=ZBrb6UdhVSI (get detailed metadata for a specific video). |
+
+### Quick Reference
+
+```bash
+# Agent ID: youtube
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+~/teneo-skill/teneo command "youtube" "video <link>" --room <roomId>
+```
+
 ## Setup
 
 **This agent is accessed via the Teneo CLI — a bash tool.** You do not need an SDK import to query this agent. If you want to build and launch your own agent, use the Go SDK via the `teneo-agent-deployment` skill.
@@ -59,6 +78,28 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 | Base | `eip155:8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 | Peaq | `eip155:3338` | `0xbbA60da06c2c5424f03f7434542280FCAd453d10` |
 | Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
+
+## Usage Examples
+
+### `search`
+
+The command lets you search for videos. Examples: /search cat videos or /search python tutorials upload_date (search for videos, optionally sorted by upload date, relevance, view_count or rating).
+
+```bash
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+```
+
+Response is JSON. Extract the `humanized` field for formatted text.
+
+### `video`
+
+The command lets you extract YouTube video metadata. Examples: /video https://www.youtube.com/watch?v=ZBrb6UdhVSI (get detailed metadata for a specific video).
+
+```bash
+~/teneo-skill/teneo command "youtube" "video <link>" --room <roomId>
+```
+
+Response is JSON. Extract the `humanized` field for formatted text.
 
 ## Agent Info
 
