@@ -486,7 +486,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.44")
+program.name("teneo-cli").version("2.0.45")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -954,7 +954,7 @@ const agentHelpText = `Usage: teneo agent <command>
 Deploy your own agents on the Teneo network.
 
 Workflow:
-  init <name>              Create a new agent project (scaffolds Go code + metadata)
+  create <name>            Create a new agent project (scaffolds Go code + metadata)
   deploy <directory>       Build, mint NFT, and start as background service
   publish <agentId>        Make your agent public (free, reviewed within 72h)
 
@@ -1317,7 +1317,8 @@ func main() {
   return { dir, agentId, files: [metaFilename, "main.go", "go.mod", ".env", ".gitignore"] };
 }
 
-agentCmd.command("init")
+agentCmd.command("create")
+  .alias("init")
   .description("Create a new agent project (scaffolds Go code + metadata)")
   .argument("<name>", "Agent name")
   .option("--id <id>", "Agent ID (kebab-case, derived from name if omitted)")
@@ -1341,7 +1342,7 @@ agentCmd.command("init")
     if (!shortDescription) missing.push("--short-description");
     if (categories.length === 0) missing.push("--category");
     if (missing.length > 0) {
-      const msg = `Missing required fields: ${missing.join(", ")}\n\nExample:\n  teneo agent init "My Agent" --type command \\\n    --description "Full description of what the agent does" \\\n    --short-description "One-line summary" \\\n    --category "AI"`;
+      const msg = `Missing required fields: ${missing.join(", ")}\n\nExample:\n  teneo agent create "My Agent" --type command \\\n    --description "Full description of what the agent does" \\\n    --short-description "One-line summary" \\\n    --category "AI"`;
       if (JSON_FLAG) { out({ error: msg }); } else { console.error(`Error: ${msg}`); }
       process.exit(1);
     }
@@ -1440,7 +1441,7 @@ agentCmd.command("init")
           name,
           next_steps: [
             `Edit ${filename} to add commands, capabilities, pricing, description, and short_description`,
-            `Run teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`,
+            `Run teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`,
           ],
         });
       } else {
@@ -1452,7 +1453,7 @@ agentCmd.command("init")
         console.log(`     - Update the description and short_description`);
         console.log(``);
         console.log(`  2. When ready to scaffold the Go project:`);
-        console.log(`     teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`);
+        console.log(`     teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`);
         console.log(``);
       }
     }
@@ -1899,7 +1900,7 @@ async function deployAgent(directory: string) {
   if (platform !== "darwin" && platform !== "linux") fail(`Unsupported platform: ${platform}. Only macOS and Linux are supported.`);
 
   const absDir = nodePath.resolve(directory);
-  if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${directory}. Create an agent first: teneo agent init ${nodePath.basename(directory)}`);
+  if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${directory}. Create an agent first: teneo agent create ${nodePath.basename(directory)}`);
 
   const meta = findMetadataInDir(absDir);
   const metadataErrors = validateMetadata(meta);
@@ -2159,7 +2160,7 @@ if (process.argv.includes("--dump-commands")) {
       arguments: cmd.registeredArguments.map((a) => ({ name: a.name(), description: a.description, required: a.required })),
       options: cmd.options.map((o) => ({ flags: o.flags, description: o.description, defaultValue: o.defaultValue })),
     };
-    // Include subcommands (e.g. agent init, agent deploy, etc.)
+    // Include subcommands (e.g. agent create, agent deploy, etc.)
     const subs = cmd.commands;
     if (subs && subs.length > 0) {
       entry.subcommands = subs.map(dumpCommand);

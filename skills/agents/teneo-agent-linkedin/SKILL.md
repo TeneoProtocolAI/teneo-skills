@@ -1,6 +1,6 @@
 ---
 name: linkedin-teneo
-version: 2.0.44
+version: 2.0.45
 description: "LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn URL and it will return its data from LinkedIn, in a structured JSON format. Use this skill when the user needs LinkedIn via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

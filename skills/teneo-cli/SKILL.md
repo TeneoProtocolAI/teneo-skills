@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.44
+version: 2.0.45
 description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection. Use this skill whenever the user needs real-time Teneo data, Teneo agent payments, or Teneo agent deployment."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -190,7 +190,7 @@ If payment fails:
 
 ## Agent Deployment
 
-Use a deterministic, non-interactive flow. Do not let the LLM improvise an interactive conversation around `agent init`.
+Use a deterministic, non-interactive flow. Do not let the LLM improvise an interactive conversation around `agent create`.
 
 ### One-Shot Init
 
@@ -198,7 +198,7 @@ Run init from a known parent directory so the resulting path is predictable:
 
 ```bash
 cd ~/teneo-skill
-~/teneo-skill/teneo agent init "My Agent" \
+~/teneo-skill/teneo agent create "My Agent" \
   --id my-agent \
   --type command \
   --description "Full description of what the agent does." \
@@ -328,7 +328,7 @@ ROOM MANAGEMENT
   ~/teneo-skill/teneo unsubscribe <roomId>           Unsubscribe from room
 
 DEPLOY & MANAGE YOUR OWN AGENTS
-  ~/teneo-skill/teneo agent init <name>              Create a new agent project (scaffolds Go code + metadata)
+  ~/teneo-skill/teneo agent create <name>            Create a new agent project (scaffolds Go code + metadata)
   ~/teneo-skill/teneo agent validate <file>          Validate agent metadata JSON file
   ~/teneo-skill/teneo agent publish <agentId>        Make your agent public (free, reviewed within 72h)
   ~/teneo-skill/teneo agent unpublish <agentId>      Remove your agent from public listing
@@ -588,12 +588,12 @@ Unsubscribe from room
 
 ### Deploy & Manage Your Own Agents
 
-#### `agent init`
+#### `agent create`
 
 Create a new agent project (scaffolds Go code + metadata)
 
 ```bash
-~/teneo-skill/teneo agent init <name> [--id <id>] [--type <type>] [--template <template>] [--description <desc>] [--short-description <desc>] [--category <cat>] [--metadata-only] [--use-cli-key]
+~/teneo-skill/teneo agent create <name> [--id <id>] [--type <type>] [--template <template>] [--description <desc>] [--short-description <desc>] [--category <cat>] [--metadata-only] [--use-cli-key]
 ```
 
 | Argument | Required | Description |
@@ -845,11 +845,11 @@ Show installed and latest available version
 
 <!-- AGENT_EXAMPLES -->
 ```bash
-# Amazon — Extract product details
-~/teneo-skill/teneo command "amazon" "product <ASIN> <domain>" --room <roomId>
-
 # Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
 ~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
+
+# Amazon — Extract product details
+~/teneo-skill/teneo command "amazon" "product <ASIN> <domain>" --room <roomId>
 
 # Google maps — Extracts business details
 ~/teneo-skill/teneo command "google-maps" "business <url>" --room <roomId>
@@ -866,14 +866,8 @@ Show installed and latest available version
 # CryptoQuant Pro 2.10 — Exchange netflow (BTC or ETH): Net movement. Positive = more
 ~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
 
-# Google Search Agent — Performs a Google search for the given query.
-~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
-
 # LayerZero — Swap tokens across chains. Fetches a quote from LayerZero, t
 ~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
-
-# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
-~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
 # Messari BTC & ETH Tracker — Extract coin details
 ~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
@@ -887,14 +881,23 @@ Show installed and latest available version
 # Squid Router — Execute cross-chain token swaps between supported chains and
 ~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 
+# X Platform Agent — Get the text content and basic information for any post. Sho
+~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
+
+# Google Search Agent — Performs a Google search for the given query.
+~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
+
+# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
+~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
+
 # Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
 ~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
 
 # VC Attention — get you an example of the output file
 ~/teneo-skill/teneo command "vc-attention" "getexamplefile" --room <roomId>
 
-# X Platform Agent — Get the text content and basic information for any post. Sho
-~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
+# Youtube — The command lets you search for videos. Examples: /search ca
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -906,24 +909,24 @@ Show installed and latest available version
 
 | Agent | Commands | Description |
 |-------|:--------:|-------------|
-| [Amazon](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-amazon/SKILL.md) | 4 | ## Overview The Amazon Agent is a high-performance tool designed to turn massive... |
 | [Gas War Sniper](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-gas-war-sniper/SKILL.md) | 12 | Real-time multi-chain gas monitoring and spike detection. Monitors block-by-bloc... |
+| [Amazon](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-amazon/SKILL.md) | 4 | ## Overview The Amazon Agent is a high-performance tool designed to turn massive... |
 | [Google maps](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-maps/SKILL.md) | 5 | ## Overview The Google Maps Agent transforms geographical and local business dat... |
 | [Instagram Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-instagram-agent/SKILL.md) | 6 | ## Overview  The Instagram Agent allows users to extract data from Instagram, in... |
 | [Tiktok](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-tiktok/SKILL.md) | 4 | ## Overview The TikTok Agent allows users to extract data from TikTok, including... |
 | [CoinMarketCap Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-coinmarketcap-agent/SKILL.md) | 5 | ##### CoinMarketCap Agent  The CoinMarketCap Agent provides comprehensive access... |
 | [CryptoQuant Pro 2.10](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-cryptoquant-pro-2-10/SKILL.md) | 12 | CryptoQuant Pro 2.10  Professional-grade market intelligence including derivativ... |
-| [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
 | [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 1 | Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports... |
-| [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
 | [Messari BTC & ETH Tracker](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-messari-btc-eth-tracker/SKILL.md) | 1 | ## Overview The Messari Tracker Agent serves as a direct bridge to Messari’s ins... |
 | [Predexon Prediction Market Agent 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-agent-1-5/SKILL.md) | 1 | # Predexon Agent — README  Unified prediction market data API for Polymarket, Ka... |
 | [Predexon Prediction Market Trading 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-trading-1-5/SKILL.md) | 14 | # Predexon Prediction Market Trading 1.5  Universal proxy for trading on Polymar... |
 | [Squid Router](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-squid-router/SKILL.md) | 1 | # Squid Router Agent  Cross-chain token swap agent powered by Squid Router. Swap... |
+| [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
+| [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
+| [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
 | [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 6 | AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, ... |
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
-| [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
-| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 0 | - |
+| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
 | [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

@@ -391,7 +391,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.43").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.45").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
   program.addHelpText("afterAll", `
 ${GREETING_INSTALL_TEXT}
@@ -805,7 +805,7 @@ var agentHelpText = `Usage: teneo agent <command>
 Deploy your own agents on the Teneo network.
 
 Workflow:
-  init <name>              Create a new agent project (scaffolds Go code + metadata)
+  create <name>            Create a new agent project (scaffolds Go code + metadata)
   deploy <directory>       Build, mint NFT, and start as background service
   publish <agentId>        Make your agent public (free, reviewed within 72h)
 
@@ -1120,7 +1120,7 @@ ${agentId}
   }
   return { dir, agentId, files: [metaFilename, "main.go", "go.mod", ".env", ".gitignore"] };
 }
-agentCmd.command("init").description("Create a new agent project (scaffolds Go code + metadata)").argument("<name>", "Agent name").option("--id <id>", "Agent ID (kebab-case, derived from name if omitted)").option("--type <type>", "Agent type (command|nlp|commandless|mcp)").option("--template <template>", "Go template: enhanced (default) or simple-openai", "enhanced").option("--description <desc>", "Agent description").option("--short-description <desc>", "Short description").option("--category <cat>", "Category (can specify multiple)", (val, prev) => prev.concat(val), []).option("--metadata-only", "Only create metadata JSON, skip Go project scaffolding").option("--use-cli-key", "Reuse the CLI wallet key for the agent").action(async (name, opts) => {
+agentCmd.command("create").alias("init").description("Create a new agent project (scaffolds Go code + metadata)").argument("<name>", "Agent name").option("--id <id>", "Agent ID (kebab-case, derived from name if omitted)").option("--type <type>", "Agent type (command|nlp|commandless|mcp)").option("--template <template>", "Go template: enhanced (default) or simple-openai", "enhanced").option("--description <desc>", "Agent description").option("--short-description <desc>", "Short description").option("--category <cat>", "Category (can specify multiple)", (val, prev) => prev.concat(val), []).option("--metadata-only", "Only create metadata JSON, skip Go project scaffolding").option("--use-cli-key", "Reuse the CLI wallet key for the agent").action(async (name, opts) => {
   let agentId = opts.id;
   let agentType = opts.type || "command";
   let description = opts.description;
@@ -1134,7 +1134,7 @@ agentCmd.command("init").description("Create a new agent project (scaffolds Go c
     const msg = `Missing required fields: ${missing.join(", ")}
 
 Example:
-  teneo agent init "My Agent" --type command \\
+  teneo agent create "My Agent" --type command \\
     --description "Full description of what the agent does" \\
     --short-description "One-line summary" \\
     --category "AI"`;
@@ -1235,7 +1235,7 @@ Created agent: ${agentId}
         name,
         next_steps: [
           `Edit ${filename} to add commands, capabilities, pricing, description, and short_description`,
-          `Run teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`
+          `Run teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`
         ]
       });
     } else {
@@ -1249,7 +1249,7 @@ Created agent metadata: ${filename}
       console.log(`     - Update the description and short_description`);
       console.log(``);
       console.log(`  2. When ready to scaffold the Go project:`);
-      console.log(`     teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`);
+      console.log(`     teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`);
       console.log(``);
     }
   }
@@ -1634,7 +1634,7 @@ async function deployAgent(directory) {
   const platform2 = nodeOs.platform();
   if (platform2 !== "darwin" && platform2 !== "linux") fail(`Unsupported platform: ${platform2}. Only macOS and Linux are supported.`);
   const absDir = nodePath.resolve(directory);
-  if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${directory}. Create an agent first: teneo agent init ${nodePath.basename(directory)}`);
+  if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${directory}. Create an agent first: teneo agent create ${nodePath.basename(directory)}`);
   const meta = findMetadataInDir(absDir);
   const metadataErrors = validateMetadata(meta);
   if (metadataErrors.length > 0) {
