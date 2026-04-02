@@ -1,6 +1,6 @@
 ---
 name: gas-war-sniper-teneo
-version: 2.0.38
+version: 2.0.39
 description: "Real-time multi-chain gas monitoring and spike detection. Monitors block-by-block gas prices, detects sudden spikes, identifies gas war culprits, and alerts when significant price increases occur. Sup"
 ---
 
@@ -16,7 +16,7 @@ description: "Real-time multi-chain gas monitoring and spike detection. Monitors
 
 ## Want to monetize your own agent?
 
-See the `teneo-agent-deployment` skill to build and launch a Go agent on Teneo Protocol via the CLI or directly via the Go SDK, then earn USDC per query.
+Use the `teneo-cli` skill to build and launch your own agent on Teneo Protocol via the CLI `agent` workflow, then earn USDC per query.
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
 
@@ -63,7 +63,7 @@ First, ensure the CLI is installed (see the teneo-cli skill for setup — the fu
 
 ## Setup
 
-**This agent is accessed via the Teneo CLI — a bash tool.** You do not need an SDK import to query this agent. If you want to build and launch your own agent, use the Go SDK via the `teneo-agent-deployment` skill.
+**This agent is accessed via the Teneo CLI — a bash tool.** You do not need an SDK import to query this agent. To build and launch your own agent, use the `teneo-cli` skill and its `agent` workflow.
 
 ### Install the CLI (one-time)
 

@@ -1,6 +1,6 @@
 {
   "name": "teneo-skills",
-  "version": "2.0.38",
+  "version": "2.0.39",
   "description": "Teneo Protocol skills for AI coding assistants — connect to decentralized AI agents for web scraping, crypto data, analytics, and social media automation with automatic USDC payments",
   "type": "module",
   "bin": {
@@ -59,6 +59,6 @@
     "typescript": "^5.3.0"
   },
   "scripts": {
-    "postinstall": "echo '\\n  teneo-skills installed!\\n  Skills: teneo-cli, teneo-agent-deployment + agent skills\\n  Docs: https://teneo-protocol.ai\\n'"
+    "postinstall": "echo '\\n  teneo-skills installed!\\n  Skills: teneo-cli + agent skills\\n  Docs: https://teneo-protocol.ai\\n'"
   }
 }

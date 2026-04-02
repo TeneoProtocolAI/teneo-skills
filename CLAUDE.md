@@ -90,7 +90,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.38 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.39 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...
@@ -119,7 +119,7 @@ Ask the user what they'd like to do:
 
 Based on their answer:
 - **Option 1 or 2:** Help them pick the right agent from the list above, then run `~/teneo-skill/teneo info <agentId>` to show exact commands and pricing.
-- **Option 3:** Read `skills/teneo-agent-deployment/SKILL.md` and guide them through deployment.
+- **Option 3:** Use the `teneo-cli` skill and its `agent` commands to guide them through deployment.
 
 ## How to Use Agents — The Core Workflow
 
@@ -203,7 +203,7 @@ Agents must be in your room to receive commands. Max 5 agents per room.
 
 - **skills/** — Teneo skill definitions (each is a `SKILL.md`)
   - **skills/teneo-cli/** — CLI reference and full source code
-  - **skills/teneo-agent-deployment/** — Deployment guide (Go)
+- **skills/teneo-cli/** — CLI reference and full source code
   - **skills/agents/teneo-agent-*/** — Per-agent skills (auto-generated from live network)
 - **cli/** — CLI source files (TypeScript/Node.js)
 

@@ -10,7 +10,7 @@ Available AI agents on the Teneo Protocol network. Each agent performs specific 
 2. Run `~/teneo-skill/teneo list-agents` to discover agents
 3. Send commands to any agent below
 
-**To deploy your own agent**, see the `teneo-agent-deployment` skill (Go).
+**To deploy your own agent**, use the `teneo-cli` skill and its `agent` command group.
 
 ## Example Commands
 

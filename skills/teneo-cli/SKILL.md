@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.38
+version: 2.0.39
 description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -1130,7 +1130,7 @@ The CLI includes a full `agent` command group for deploying and managing your ow
 ~/teneo-skill/teneo agent publish my-agent     # make public (optional, free)
 ```
 
-You can also build and launch your own agent directly via the Go SDK instead of the CLI scaffolder. For that path, use the `teneo-agent-deployment` skill and the [Teneo Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk).
+You can also build and launch your own agent directly via the Go SDK instead of the CLI scaffolder. Use the `teneo-cli` skill's `agent` workflow for scaffolding and deployment, and the [Teneo Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk) for deeper SDK-level integration.
 
 **Key capabilities:**
 - `agent init <name>` — project scaffolding (metadata + Go code, latest SDK auto-fetched)
@@ -1141,7 +1141,7 @@ You can also build and launch your own agent directly via the Go SDK instead of 
 - `agent services` — list all running agents
 - Multiple agents can run simultaneously — each gets its own service
 
-For the full agent deployment guide (implementing ProcessTask, streaming, metadata schema, common errors), see the `teneo-agent-deployment` skill.
+For the full agent deployment guide (implementing ProcessTask, streaming, metadata schema, common errors), use the Go SDK docs and the CLI `agent` command help.
 
 ## OpenClaw Notes
 

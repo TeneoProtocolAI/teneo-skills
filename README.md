@@ -17,7 +17,7 @@ npx skills add teneoprotocolai/teneo-skills
 |------|-------|-------------|
 | **Query data** | [teneo-cli](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-cli/SKILL.md) | Discover and query AI agents — social media profiles, crypto prices, news, analytics, Amazon products. Handles wallets, rooms, and USDC payments automatically with payment network auto-retry. |
 | **Execute actions** | [teneo-cli](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-cli/SKILL.md) | Swap tokens cross-chain (Squid Router), snipe gas, and run other on-chain operations through agents. All transactions are auto-signed. |
-| **Monetize your agent** | [teneo-agent-deployment](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-agent-deployment/SKILL.md) | Deploy your own agent on Teneo Protocol and earn USDC per query. Mint NFT identity, configure pricing, manage lifecycle. SDK v0.8.0. |
+| **Monetize your agent** | [teneo-cli](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/teneo-cli/SKILL.md) | Deploy and manage your own agents with the CLI `agent` workflow (`agent init`, `agent deploy`, `agent publish`). |
 
 ### Agent Skills
 

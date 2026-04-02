@@ -1,9 +1,8 @@
 {
   "name": "teneo-skills",
-  "version": "2.0.38",
+  "version": "2.0.39",
   "skills": [
     "./skills/teneo-cli",
-    "./skills/teneo-agent-deployment",
     "./skills/agents",
     "./skills/agents/teneo-agent-amazon",
     "./skills/agents/teneo-agent-gas-war-sniper",
