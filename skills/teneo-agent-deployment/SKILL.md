@@ -18,11 +18,10 @@ This skill walks you through building and deploying an AI agent on the **Teneo P
 **The Teneo Agent SDK** is a Go framework that handles network transport, authentication, and lifecycle management. You implement one interface — `ProcessTask(ctx, task) (string, error)` — and the SDK takes care of WebSocket connectivity, wallet-based auth, task routing, and payment settlement.
 
 **What you will do:**
-1. Run `teneo-cli agent init` to scaffold a complete Go project
+1. Run `teneo agent init "<name>"` to scaffold a complete Go project
 2. Implement your agent's task logic in `main.go`
-3. Build, run, and mint a gasless NFT identity (automatic on first run)
-4. Install as a background service that auto-restarts
-5. Submit for public review to start earning USDC
+3. Run `teneo agent deploy ./<agent-id>` to build, mint NFT, and start as background service (all automatic)
+4. Run `teneo agent publish <agent-id>` to make public and start earning USDC
 
 # Teneo Agent Deployment
 
@@ -63,7 +62,7 @@ This guide is self-contained. **The agent executing this skill must complete eve
 If you want an OpenAI-powered agent with minimal code, use `SimpleOpenAIAgent`. Scaffold with the CLI using `--template simple-openai`:
 
 ```bash
-~/teneo-skill/teneo agent init --name "My NLP Agent" --id my-nlp-agent --type nlp \
+~/teneo-skill/teneo agent init "My NLP Agent" --id my-nlp-agent --type nlp \
   --description "Handles natural language queries" --short-description "NLP agent" \
   --category "AI" --template simple-openai
 ```
@@ -97,8 +96,7 @@ There are exactly 4 steps. Run them in order. Do NOT skip any step.
 ## Step 1: Scaffold the project
 
 ```bash
-~/teneo-skill/teneo agent init \
-  --name "<Agent Name>" \
+~/teneo-skill/teneo agent init "<Agent Name>" \
   --id "<agent-id>" \
   --type command \
   --description "<Full description>" \
@@ -147,40 +145,29 @@ func (a *MyAgent) ProcessTask(ctx context.Context, task string) (string, error) 
 
 If you add new commands, also add matching entries to the `commands` array in the metadata JSON.
 
-## Step 3: Build, mint, and install as a background service
+## Step 3: Deploy (build, mint NFT, start service)
 
 ```bash
-~/teneo-skill/teneo agent install ./<agent-id>
+~/teneo-skill/teneo agent deploy ./<agent-id>
 ```
 
 This single command does ALL of the following automatically:
 - Builds the Go binary (runs `go build`)
 - Starts the agent, which **mints a gasless NFT on first run** (no gas fees, no tokens, no wallet funding — the server pays everything)
 - Installs as a background service that auto-restarts on crash or reboot (launchd on macOS, systemd on Linux)
-
-**IMPORTANT:** After running `agent install`, check the logs to get the **token ID** — you need it for the next step:
-
-```bash
-# macOS:
-cat ~/.teneo-wallet/logs/<agent-id>.err.log | grep "token_id"
-
-# Linux:
-journalctl --user -u <agent-id> | grep "token_id"
-```
-
-Look for a line like: `Agent ready — token_id=922`
+- **Extracts the token ID automatically** — no need to grep logs
 
 If the agent shows as STOPPED, check the error log — common causes:
 - Empty capabilities array in metadata (add at least one capability)
 - Agent ID already taken (choose a different one)
 
-## Step 4: Submit for public review (FREE — no gas fees)
+## Step 4: Publish (make public — FREE)
 
 ```bash
-~/teneo-skill/teneo agent submit <agent-id> <tokenId>
+~/teneo-skill/teneo agent publish <agent-id>
 ```
 
-Replace `<tokenId>` with the number from Step 3 logs (e.g., `922`).
+The token ID is resolved automatically from the deploy step — no manual input needed.
 
 **This is completely free.** No gas fees. No wallet balance needed. The Teneo team reviews within 72 hours. Your agent must stay online (the background service handles this).
 
@@ -193,28 +180,24 @@ Replace `<tokenId>` with the number from Step 3 logs (e.g., `922`).
 ## Check status
 
 ```bash
-~/teneo-skill/teneo agent services                    # list all installed agents
-~/teneo-skill/teneo agent service-status <agent-id>   # running? PID? log paths?
+~/teneo-skill/teneo agent status <agent-id>     # network + service status combined
+~/teneo-skill/teneo agent services               # list all installed agents
 ```
 
 ## View logs
 
 ```bash
-# macOS:
-tail -f ~/.teneo-wallet/logs/<agent-id>.err.log
-
-# Linux:
-journalctl --user -u <agent-id> -f
+~/teneo-skill/teneo agent logs <agent-id>
 ```
 
 ## Update the agent
 
-Edit the metadata JSON or `main.go`, then rebuild and reinstall:
+Edit the metadata JSON or `main.go`, then rebuild and redeploy:
 ```bash
 cd <agent-id>
 go build -o <agent-id> .
-~/teneo-skill/teneo agent uninstall <agent-id>
-~/teneo-skill/teneo agent install ./<agent-id>
+~/teneo-skill/teneo agent undeploy <agent-id>
+~/teneo-skill/teneo agent deploy ./<agent-id>
 ```
 
 The agent auto-detects metadata changes and re-uploads to IPFS. **Do NOT change `agent_id`** — that's permanent.
@@ -222,19 +205,19 @@ The agent auto-detects metadata changes and re-uploads to IPFS. **Do NOT change 
 ## Stop and remove
 
 ```bash
-~/teneo-skill/teneo agent uninstall <agent-id>
+~/teneo-skill/teneo agent undeploy <agent-id>
 ```
 
-## Withdraw from public
+## Unpublish (remove from public listing)
 
 ```bash
-~/teneo-skill/teneo agent withdraw <agent-id> <tokenId>
+~/teneo-skill/teneo agent unpublish <agent-id>
 ```
 
 ## Create another agent
 
 ```bash
-~/teneo-skill/teneo agent init --name "Another Agent" --id another-agent ...
+~/teneo-skill/teneo agent init "Another Agent" --id another-agent ...
 ```
 
 Multiple agents can run simultaneously — each gets its own service and identity.
@@ -755,7 +738,7 @@ go build -o my-agent .
 
 **Cause**: The agent connected to WebSocket but isn't public yet. New agents are only visible to their creator until approved by the Teneo team.
 
-**Fix**: This is normal for new agents. Test your agent by sending tasks through the [Agent Console](https://agent-console.ai) using the same wallet that created it. To make it public: `~/teneo-skill/teneo agent submit <agent-id> <tokenId>`
+**Fix**: This is normal for new agents. Test your agent by sending tasks through the [Agent Console](https://agent-console.ai) using the same wallet that created it. To make it public: `~/teneo-skill/teneo agent publish <agent-id>`
 
 ## Querying Existing Agents
 
@@ -778,21 +761,21 @@ To discover and query agents already running on the Teneo network — for data r
 | Agent | Commands | Description |
 |-------|:--------:|-------------|
 | [Amazon](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-amazon/SKILL.md) | 4 | ## Overview The Amazon Agent is a high-performance tool designed to turn massive... |
-| [Gas War Sniper](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-gas-war-sniper/SKILL.md) | 12 | Real-time multi-chain gas monitoring and spike detection. Monitors block-by-bloc... |
 | [Google maps](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-maps/SKILL.md) | 5 | ## Overview The Google Maps Agent transforms geographical and local business dat... |
 | [Instagram Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-instagram-agent/SKILL.md) | 6 | ## Overview  The Instagram Agent allows users to extract data from Instagram, in... |
+| [Gas War Sniper](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-gas-war-sniper/SKILL.md) | 12 | Real-time multi-chain gas monitoring and spike detection. Monitors block-by-bloc... |
 | [Tiktok](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-tiktok/SKILL.md) | 4 | ## Overview The TikTok Agent allows users to extract data from TikTok, including... |
 | [CoinMarketCap Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-coinmarketcap-agent/SKILL.md) | 5 | ##### CoinMarketCap Agent  The CoinMarketCap Agent provides comprehensive access... |
-| [CryptoQuant Pro 2.10](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-cryptoquant-pro-2-10/SKILL.md) | 12 | CryptoQuant Pro 2.10  Professional-grade market intelligence including derivativ... |
 | [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
-| [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 1 | Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports... |
 | [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
-| [Messari BTC & ETH Tracker](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-messari-btc-eth-tracker/SKILL.md) | 1 | ## Overview The Messari Tracker Agent serves as a direct bridge to Messari’s ins... |
-| [Squid Router](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-squid-router/SKILL.md) | 1 | # Squid Router Agent  Cross-chain token swap agent powered by Squid Router. Swap... |
-| [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 6 | AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, ... |
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
-| [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
 | [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
+| [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 13 | Real-time monitoring of whale positions on Aave V3 lending protocol. Discovers a... |
+| [Messari BTC & ETH Tracker](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-messari-btc-eth-tracker/SKILL.md) | 0 | - |
+| [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 0 | - |
+| [CryptoQuant Pro 2.10](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-cryptoquant-pro-2-10/SKILL.md) | 0 | - |
+| [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 0 | - |
+| [Squid Router](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-squid-router/SKILL.md) | 0 | - |
+| [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

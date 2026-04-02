@@ -180,6 +180,20 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
+function normalizeDaemonError(error: string): string {
+  if (error.includes("Not connected to Teneo network")) {
+    return "Connection to Teneo network was lost. The daemon is reconnecting — please retry in a few seconds.";
+  }
+  return error;
+}
+
+function parseTokenId(value: string | undefined, source = "--token-id"): number | undefined {
+  if (value === undefined) return undefined;
+  const tokenId = Number(value);
+  if (!Number.isInteger(tokenId)) fail(`${source} must be a whole number`);
+  return tokenId;
+}
+
 function pad(str: string, len: number): string {
   return str.length >= len ? str.substring(0, len - 1) + " " : str + " ".repeat(len - str.length);
 }
@@ -210,7 +224,7 @@ function isDaemonRunning(): boolean {
   } catch { return false; }
 }
 
-async function startDaemon(): Promise<number> {
+async function startDaemonSafe(): Promise<{ port?: number; error?: string }> {
   console.error(JSON.stringify({ info: "Starting daemon..." }));
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = nodePath.dirname(__filename);
@@ -233,18 +247,32 @@ async function startDaemon(): Promise<number> {
         const res = await fetch(`http://localhost:${port}/health`);
         if (res.ok) {
           console.error(JSON.stringify({ info: `Daemon ready on port ${port}` }));
-          return port;
+          return { port };
         }
       } catch { /* not ready yet */ }
     }
   }
-  fail("Daemon failed to start within 15 seconds.");
+  return { error: "Daemon failed to start within 15 seconds." };
+}
+
+async function startDaemon(): Promise<number> {
+  const result = await startDaemonSafe();
+  if (result.error || !result.port) fail(result.error || "Daemon failed to start.");
+  return result.port;
 }
 
 async function execViaDaemon(command: string, args: Record<string, any> = {}): Promise<any> {
+  const response = await tryExecViaDaemon(command, args);
+  if (response.error) fail(response.error);
+  return response.result;
+}
+
+async function tryExecViaDaemon(command: string, args: Record<string, any> = {}): Promise<{ result?: any; error?: string }> {
   let port = getDaemonPort();
   if (!port || !isDaemonRunning()) {
-    port = await startDaemon();
+    const started = await startDaemonSafe();
+    if (started.error || !started.port) return { error: started.error || "Daemon failed to start." };
+    port = started.port;
   }
 
   let res: Response;
@@ -257,7 +285,9 @@ async function execViaDaemon(command: string, args: Record<string, any> = {}): P
   } catch (err: any) {
     // Daemon may have crashed — try restarting once
     console.error(JSON.stringify({ warn: "Daemon connection lost, restarting..." }));
-    port = await startDaemon();
+    const restarted = await startDaemonSafe();
+    if (restarted.error || !restarted.port) return { error: restarted.error || "Daemon failed to start." };
+    port = restarted.port;
     res = await fetch(`http://localhost:${port}/exec`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -266,12 +296,9 @@ async function execViaDaemon(command: string, args: Record<string, any> = {}): P
   }
   const data = await res.json() as any;
   if (data.error) {
-    if (data.error.includes("Not connected to Teneo network")) {
-      fail("Connection to Teneo network was lost. The daemon is reconnecting — please retry in a few seconds.");
-    }
-    fail(data.error);
+    return { error: normalizeDaemonError(data.error) };
   }
-  return data.result;
+  return { result: data.result };
 }
 
 async function resolveRoom(opt?: string): Promise<string> {
@@ -296,7 +323,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.30")
+program.name("teneo-cli").version("2.0.31")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 
@@ -696,7 +723,106 @@ function toKebabCase(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-const agentCmd = program.command("agent").description("Deploy and manage YOUR OWN agents on the Teneo network");
+const agentCmd = program.command("agent").description("Deploy your own agents on the Teneo network");
+agentCmd.addHelpCommand(false);
+const agentHelpText = `Usage: teneo agent <command>
+
+Deploy your own agents on the Teneo network.
+
+Workflow:
+  init <name>              Create a new agent project (scaffolds Go code + metadata)
+  deploy <directory>       Build, mint NFT, and start as background service
+  publish <agentId>        Make your agent public (free, reviewed within 72h)
+
+Management:
+  status <agentId>         Show agent status (network + local service)
+  logs <agentId>           Tail agent logs
+  list                     List all your agents
+  services                 List locally running agent services
+  undeploy <agentId>       Stop and remove background service
+  unpublish <agentId>      Remove from public listing
+
+Utilities:
+  validate <file>          Validate a metadata JSON file
+`;
+(agentCmd as any).helpInformation = () => `${agentHelpText}\n`;
+
+// ─── Token Registry ─────────────────────────────────────────────────────────
+// Stores token IDs locally so publish/unpublish don't need manual input.
+
+const TOKEN_REGISTRY_FILE = nodePath.join(WALLET_DIR, "agent-tokens.json");
+
+function loadTokenRegistry(): Record<string, { token_id: number }> {
+  try {
+    if (nodeFs.existsSync(TOKEN_REGISTRY_FILE)) {
+      return JSON.parse(nodeFs.readFileSync(TOKEN_REGISTRY_FILE, "utf8"));
+    }
+  } catch {}
+  return {};
+}
+
+function saveTokenToRegistry(agentId: string, tokenId: number): void {
+  ensureWalletDir();
+  const reg = loadTokenRegistry();
+  reg[agentId] = { token_id: tokenId };
+  nodeFs.writeFileSync(TOKEN_REGISTRY_FILE, JSON.stringify(reg, null, 2));
+}
+
+function removeTokenFromRegistry(agentId: string): void {
+  const reg = loadTokenRegistry();
+  if (reg[agentId]) {
+    delete reg[agentId];
+    nodeFs.writeFileSync(TOKEN_REGISTRY_FILE, JSON.stringify(reg, null, 2));
+  }
+}
+
+async function waitForTokenId(agentId: string, timeoutMs = 30000): Promise<number | null> {
+  const logFile = nodePath.join(AGENT_LOG_DIR, `${agentId}.err.log`);
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      if (nodeFs.existsSync(logFile)) {
+        const content = nodeFs.readFileSync(logFile, "utf8");
+        const match = content.match(/token_id=(\d+)/);
+        if (match) return parseInt(match[1]);
+      }
+    } catch {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return null;
+}
+
+async function resolveTokenId(agentId: string, manualTokenId?: number, action = "publish"): Promise<number> {
+  // 1. Manual override
+  if (manualTokenId !== undefined) return manualTokenId;
+
+  // 2. Local registry
+  const reg = loadTokenRegistry();
+  if (reg[agentId]?.token_id) return reg[agentId].token_id;
+
+  // 3. Daemon (network status may include token_id)
+  const daemonResult = await tryExecViaDaemon("my-agent-status", { agentId, walletAddress: getWalletAddress() });
+  if (daemonResult.result?.token_id) {
+    saveTokenToRegistry(agentId, daemonResult.result.token_id);
+    return daemonResult.result.token_id;
+  }
+
+  // 4. Parse log file
+  const logFile = nodePath.join(AGENT_LOG_DIR, `${agentId}.err.log`);
+  try {
+    if (nodeFs.existsSync(logFile)) {
+      const content = nodeFs.readFileSync(logFile, "utf8");
+      const match = content.match(/token_id=(\d+)/);
+      if (match) {
+        const tokenId = parseInt(match[1]);
+        saveTokenToRegistry(agentId, tokenId);
+        return tokenId;
+      }
+    }
+  } catch {}
+
+  fail(`Cannot ${action} — no token ID found. Deploy the agent first: teneo agent deploy ./${agentId}`);
+}
 
 // Ensure Go is installed — auto-install to ~/.teneo-wallet/go (no sudo required)
 const GO_VERSION = "1.24.1";
@@ -789,7 +915,6 @@ async function getLatestSDKVersion(): Promise<string> {
   return SDK_FALLBACK_VERSION;
 }
 
-// Shared scaffold logic — used by both `agent init` and `agent scaffold`
 async function scaffoldAgent(meta: any, opts: { type: string; useCliKey: boolean }): Promise<{ dir: string; agentId: string; files: string[] }> {
   await ensureGo();
 
@@ -953,51 +1078,32 @@ func main() {
 }
 
 agentCmd.command("init")
-  .description("Create agent metadata JSON and scaffold Go project")
-  .option("--name <name>", "Agent name")
-  .option("--id <id>", "Agent ID (kebab-case)")
+  .description("Create a new agent project (scaffolds Go code + metadata)")
+  .argument("<name>", "Agent name")
+  .option("--id <id>", "Agent ID (kebab-case, derived from name if omitted)")
   .option("--type <type>", "Agent type (command|nlp|commandless|mcp)")
   .option("--template <template>", "Go template: enhanced (default) or simple-openai", "enhanced")
   .option("--description <desc>", "Agent description")
   .option("--short-description <desc>", "Short description")
   .option("--category <cat>", "Category (can specify multiple)", (val: string, prev: string[]) => prev.concat(val), [] as string[])
-  .option("--no-scaffold", "Only create metadata JSON, skip Go project scaffolding")
+  .option("--metadata-only", "Only create metadata JSON, skip Go project scaffolding")
   .option("--use-cli-key", "Reuse the CLI wallet key for the agent")
-  .action(async (opts: any) => {
-    let name = opts.name;
+  .action(async (name: string, opts: any) => {
     let agentId = opts.id;
     let agentType = opts.type || "command";
     let description = opts.description;
     let shortDescription = opts.shortDescription;
     let categories = opts.category?.length ? opts.category : [];
 
-    // Interactive mode if required fields are missing
-    if (!name || !description || !shortDescription || categories.length === 0) {
-      try {
-        const { input, select, checkbox } = await import("@inquirer/prompts");
-
-        if (!name) name = await input({ message: "Agent name:" });
-        if (!agentId) agentId = toKebabCase(name);
-        const suggestedId = agentId;
-        agentId = await input({ message: "Agent ID (kebab-case):", default: suggestedId });
-        if (!shortDescription) shortDescription = await input({ message: "Short description (one line):" });
-        if (!description) description = await input({ message: "Full description:" });
-        agentType = await select({
-          message: "Agent type:",
-          choices: VALID_AGENT_TYPES.map(t => ({ value: t, name: t })),
-          default: agentType,
-        });
-        if (categories.length === 0) {
-          categories = await checkbox({
-            message: "Categories (select 1-2):",
-            choices: VALID_CATEGORIES.map(c => ({ value: c, name: c })),
-            required: true,
-          });
-        }
-      } catch (err: any) {
-        if (err.name === "ExitPromptError") { process.exit(0); }
-        throw err;
-      }
+    // Fail with clear error if required fields are missing (no interactive prompts — LLMs can't use them)
+    const missing: string[] = [];
+    if (!description) missing.push("--description");
+    if (!shortDescription) missing.push("--short-description");
+    if (categories.length === 0) missing.push("--category");
+    if (missing.length > 0) {
+      const msg = `Missing required fields: ${missing.join(", ")}\n\nExample:\n  teneo agent init "My Agent" --type command \\\n    --description "Full description of what the agent does" \\\n    --short-description "One-line summary" \\\n    --category "AI"`;
+      if (JSON_FLAG) { out({ error: msg }); } else { console.error(`Error: ${msg}`); }
+      process.exit(1);
     }
 
     if (!agentId) agentId = toKebabCase(name);
@@ -1038,26 +1144,74 @@ agentCmd.command("init")
       process.exit(1);
     }
 
-    // Scaffold the full Go project unless --no-scaffold
-    if (opts.scaffold !== false) {
+    const metadataOnly = opts.metadataOnly;
+
+    // Scaffold the full Go project unless --metadata-only
+    if (!metadataOnly) {
       const result = await scaffoldAgent(metadata, { type: opts.template || "enhanced", useCliKey: !!opts.useCliKey });
-      out({
-        status: "created",
-        agent_id: agentId,
-        name,
-        directory: result.dir,
-        files: result.files,
-        next_steps: [
-          `cd ${result.dir}`,
-          "go mod tidy",
-          `go build -o ${agentId} .`,
-          `./${agentId}`,
-        ],
-      });
+      const metaFile = `${result.dir}/${agentId}-metadata.json`;
+
+      if (JSON_FLAG) {
+        out({
+          status: "created",
+          agent_id: agentId,
+          name,
+          directory: result.dir,
+          files: result.files,
+          next_steps: [
+            `Edit ${metaFile} to define your commands and pricing`,
+            `Edit ${result.dir}/main.go to implement your agent logic in ProcessTask`,
+            `teneo agent deploy ./${result.dir}`,
+            `teneo agent publish ${agentId}`,
+          ],
+        });
+      } else {
+        console.log(`\nCreated agent: ${agentId}\n`);
+        console.log(`  Files:`);
+        console.log(`    ${metaFile}   <- commands, pricing, description`);
+        console.log(`    ${result.dir}/main.go${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/main.go`.length))}   <- your agent logic (ProcessTask)`);
+        console.log(`    ${result.dir}/.env${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/.env`.length))}   <- private key (auto-generated)`);
+        console.log(``);
+        console.log(`  What to do now:`);
+        console.log(`  1. Edit ${metaFile}`);
+        console.log(`     - Add your commands to the "commands" array (trigger, description, price)`);
+        console.log(`     - Update the description and short_description`);
+        console.log(``);
+        console.log(`  2. Edit ${result.dir}/main.go`);
+        console.log(`     - Implement your logic in the ProcessTask function`);
+        console.log(`     - The switch/case maps command triggers to your code`);
+        console.log(``);
+        console.log(`  3. When ready, deploy:`);
+        console.log(`     teneo agent deploy ./${result.dir}`);
+        console.log(``);
+        console.log(`  Everything is free. Minting costs nothing. No gas fees.`);
+        console.log(``);
+      }
     } else {
       const filename = `${agentId}-metadata.json`;
       nodeFs.writeFileSync(filename, JSON.stringify(metadata, null, 2));
-      out({ status: "created", file: filename, agent_id: agentId, name });
+      if (JSON_FLAG) {
+        out({
+          status: "created",
+          file: filename,
+          agent_id: agentId,
+          name,
+          next_steps: [
+            `Edit ${filename} to add commands, pricing, description, and short_description`,
+            `Run teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`,
+          ],
+        });
+      } else {
+        console.log(`\nCreated agent metadata: ${filename}\n`);
+        console.log(`  What to do now:`);
+        console.log(`  1. Edit ${filename}`);
+        console.log(`     - Add your commands to the "commands" array (trigger, description, price)`);
+        console.log(`     - Update the description and short_description`);
+        console.log(``);
+        console.log(`  2. When ready to scaffold the Go project:`);
+        console.log(`     teneo agent init "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`);
+        console.log(``);
+      }
     }
   });
 
@@ -1081,46 +1235,64 @@ agentCmd.command("validate")
     out({ status: "valid", agent_id: meta.agent_id || meta.agentId, name: meta.name, commands: meta.commands?.length || 0, categories: meta.categories });
   });
 
-agentCmd.command("submit")
-  .description("Submit agent for public review")
-  .argument("<agentId>", "Agent ID")
-  .argument("<tokenId>", "NFT token ID")
-  .action(async (agentId: string, tokenIdStr: string) => {
-    const tokenId = parseInt(tokenIdStr);
-    if (isNaN(tokenId)) fail("tokenId must be a number");
-    const key = requireKey();
-    const hex = key.startsWith("0x") ? key : `0x${key}`;
-    const address = privateKeyToAccount(hex as `0x${string}`).address;
+async function publishAgent(agentId: string, manualTokenId?: number) {
+  const tokenId = await resolveTokenId(agentId, manualTokenId, "publish");
+  const key = requireKey();
+  const hex = key.startsWith("0x") ? key : `0x${key}`;
+  const address = privateKeyToAccount(hex as `0x${string}`).address;
 
-    const res = await fetch(`${BACKEND_REST_URL}/api/agents/${agentId}/submit-for-review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creator_wallet: address, token_id: tokenId }),
-    });
-    const data = await res.json() as any;
-    if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
-    out({ status: "submitted", agentId, tokenId, ...data });
+  const res = await fetch(`${BACKEND_REST_URL}/api/agents/${agentId}/submit-for-review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ creator_wallet: address, token_id: tokenId }),
+  });
+  const data = await res.json() as any;
+  if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
+
+  if (JSON_FLAG) {
+    out({ status: "published", agentId, tokenId, ...data });
+  } else {
+    console.log(`\nPublished: ${agentId}\n`);
+    console.log(`  Status:  pending review (typically approved within 72h)`);
+    console.log(`  Your agent will appear in the public Agent Console after review.\n`);
+    console.log(`  To check status:    teneo agent status ${agentId}`);
+    console.log(`  To unpublish:       teneo agent unpublish ${agentId}`);
+    console.log(``);
+  }
+}
+
+async function unpublishAgent(agentId: string, manualTokenId?: number) {
+  const tokenId = await resolveTokenId(agentId, manualTokenId, "unpublish");
+  const key = requireKey();
+  const hex = key.startsWith("0x") ? key : `0x${key}`;
+  const address = privateKeyToAccount(hex as `0x${string}`).address;
+
+  const res = await fetch(`${BACKEND_REST_URL}/api/agents/${agentId}/withdraw-public`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ creator_wallet: address, token_id: tokenId }),
+  });
+  const data = await res.json() as any;
+  if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
+
+  if (JSON_FLAG) out({ status: "unpublished", agentId, tokenId, ...data });
+  else console.log(`\nUnpublished: ${agentId}\n`);
+}
+
+agentCmd.command("publish")
+  .description("Make your agent public (free, reviewed within 72h)")
+  .argument("<agentId>", "Agent ID")
+  .option("--token-id <id>", "NFT token ID (auto-detected if omitted)")
+  .action(async (agentId: string, opts: any) => {
+    await publishAgent(agentId, parseTokenId(opts.tokenId));
   });
 
-agentCmd.command("withdraw")
-  .description("Withdraw agent from public back to private")
+agentCmd.command("unpublish")
+  .description("Remove your agent from public listing")
   .argument("<agentId>", "Agent ID")
-  .argument("<tokenId>", "NFT token ID")
-  .action(async (agentId: string, tokenIdStr: string) => {
-    const tokenId = parseInt(tokenIdStr);
-    if (isNaN(tokenId)) fail("tokenId must be a number");
-    const key = requireKey();
-    const hex = key.startsWith("0x") ? key : `0x${key}`;
-    const address = privateKeyToAccount(hex as `0x${string}`).address;
-
-    const res = await fetch(`${BACKEND_REST_URL}/api/agents/${agentId}/withdraw-public`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creator_wallet: address, token_id: tokenId }),
-    });
-    const data = await res.json() as any;
-    if (!res.ok) fail(data.message || data.error || `HTTP ${res.status}`);
-    out({ status: "withdrawn", agentId, tokenId, ...data });
+  .option("--token-id <id>", "NFT token ID (auto-detected if omitted)")
+  .action(async (agentId: string, opts: any) => {
+    await unpublishAgent(agentId, parseTokenId(opts.tokenId));
   });
 
 agentCmd.command("list")
@@ -1148,55 +1320,78 @@ agentCmd.command("list")
     console.log(`\n${agents.length} agent(s) owned by this wallet.`);
   });
 
+async function getNetworkStatus(agentId: string): Promise<{ data: any | null; error: string | null }> {
+  const response = await tryExecViaDaemon("my-agent-status", { agentId, walletAddress: getWalletAddress() });
+  if (response.error) return { data: null, error: response.error };
+  return { data: response.result, error: null };
+}
+
+async function showAgentStatus(agentId: string) {
+  const networkStatus = await getNetworkStatus(agentId);
+  const service = await getLocalServiceStatus(agentId);
+  const daemonUnavailable = !!networkStatus.error;
+
+  if (!networkStatus.data && service.status === "not_installed") {
+    fail(`Agent '${agentId}' not found. List your agents: teneo agent list`);
+  }
+
+  if (JSON_FLAG) {
+    out({
+      agent_id: agentId,
+      ...(networkStatus.data ? {
+        name: networkStatus.data.agent_name || agentId,
+        is_online: networkStatus.data.is_online,
+        visibility: networkStatus.data.visibility,
+        token_id: networkStatus.data.token_id,
+      } : {}),
+      ...(daemonUnavailable ? { note: "Network status unavailable; showing local service info only." } : {}),
+      service,
+    });
+    return;
+  }
+
+  console.log(``);
+  console.log(`  Agent:        ${networkStatus.data?.agent_name || agentId}`);
+  if (networkStatus.data) {
+    console.log(`  Network:      ${networkStatus.data.is_online ? "ONLINE" : "OFFLINE"}`);
+    console.log(`  Visibility:   ${networkStatus.data.visibility || "unknown"}`);
+    if (networkStatus.data.token_id) console.log(`  Token ID:     ${networkStatus.data.token_id}`);
+  } else {
+    console.log(`  Network:      unavailable (showing local service info only)`);
+  }
+  console.log(``);
+  if (service.status !== "not_installed") {
+    console.log(`  Service:      ${service.status}${service.pid ? ` (PID ${service.pid})` : ""}`);
+    console.log(`  Platform:     ${service.platform}`);
+    if (service.logs?.stderr) console.log(`  Logs:         ${service.logs.stderr}`);
+  } else {
+    console.log(`  Service:      not installed locally`);
+  }
+  console.log(``);
+}
+
 agentCmd.command("status")
-  .description("Check deployment status of an owned agent")
+  .description("Show agent status (network + local service)")
   .argument("<agentId>", "Agent ID")
   .action(async (agentId: string) => {
-    const result = await execViaDaemon("my-agent-status", { agentId, walletAddress: getWalletAddress() });
-    if (JSON_FLAG) { out(result); return; }
-
-    if (result.error) { fail(result.error); }
-    const a = result;
-    console.log(`\n  Agent:      ${a.agent_name || a.agent_id}`);
-    console.log(`  ID:         ${a.agent_id}`);
-    console.log(`  Status:     ${a.is_online ? "ONLINE" : "OFFLINE"}`);
-    console.log(`  Visibility: ${a.visibility || "unknown"}`);
-    if (a.token_id) console.log(`  Token ID:   ${a.token_id}`);
-    if (a.description) console.log(`  Description: ${a.description}`);
-    console.log("");
+    await showAgentStatus(agentId);
   });
 
-agentCmd.command("scaffold")
-  .description("Scaffold a Go agent project from existing metadata JSON")
-  .argument("<metadataFile>", "Path to metadata JSON file")
-  .option("--template <template>", "Go template: enhanced (default) or simple-openai", "enhanced")
-  .option("--use-cli-key", "Reuse the CLI wallet key for the agent")
-  .action(async (metadataFile: string, opts: any) => {
-    if (!nodeFs.existsSync(metadataFile)) fail(`File not found: ${metadataFile}`);
-    let meta: any;
-    try { meta = JSON.parse(nodeFs.readFileSync(metadataFile, "utf8")); }
-    catch { fail(`Invalid JSON in ${metadataFile}`); }
-
-    const errors = validateMetadata(meta);
-    if (errors.length > 0) {
-      console.error("Metadata validation failed:");
-      errors.forEach(e => console.error(`  ${e.field}: ${e.message}`));
-      process.exit(1);
+agentCmd.command("logs")
+  .description("Tail agent logs")
+  .argument("<agentId>", "Agent ID")
+  .option("--lines <n>", "Number of lines to show", "50")
+  .option("--no-follow", "Don't follow (just print and exit)")
+  .action(async (agentId: string, opts: any) => {
+    const logFile = nodePath.join(AGENT_LOG_DIR, `${agentId}.err.log`);
+    if (!nodeFs.existsSync(logFile)) {
+      fail(`No logs found for "${agentId}". Deploy first: teneo agent deploy ./${agentId}`);
     }
-
-    const result = await scaffoldAgent(meta, { type: opts.template || "enhanced", useCliKey: !!opts.useCliKey });
-    out({
-      status: "scaffolded",
-      directory: result.dir,
-      agentId: result.agentId,
-      files: result.files,
-      next_steps: [
-        `cd ${result.dir}`,
-        "go mod tidy",
-        `go build -o ${result.agentId} .`,
-        `./${result.agentId}`,
-      ],
-    });
+    const { spawn: spawnProc } = await import("node:child_process");
+    const args = ["-n", opts.lines];
+    if (opts.follow !== false) args.push("-f");
+    const tail = spawnProc("tail", [...args, logFile], { stdio: "inherit" });
+    tail.on("close", (code: number | null) => process.exit(code ?? 0));
   });
 
 // ─── Agent Service Management ────────────────────────────────────────────────
@@ -1247,6 +1442,7 @@ function generateMacPlist(agentId: string, binaryPath: string, workDir: string):
 }
 
 function generateLinuxUnit(agentId: string, binaryPath: string, workDir: string): string {
+  const logs = getAgentLogPaths(agentId);
   return `[Unit]
 Description=Teneo Agent: ${agentId}
 After=network-online.target
@@ -1259,10 +1455,63 @@ WorkingDirectory=${workDir}
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:${logs.stdout}
+StandardError=append:${logs.stderr}
 
 [Install]
 WantedBy=default.target
 `;
+}
+
+function getAgentLogPaths(agentId: string) {
+  return {
+    stdout: `${AGENT_LOG_DIR}/${agentId}.out.log`,
+    stderr: `${AGENT_LOG_DIR}/${agentId}.err.log`,
+  };
+}
+
+async function getLocalServiceStatus(agentId: string): Promise<any> {
+  const { execSync } = await import("node:child_process");
+  const platform = nodeOs.platform();
+  const logs = getAgentLogPaths(agentId);
+
+  if (platform === "darwin") {
+    const plistPath = getMacPlistPath(agentId);
+    if (!nodeFs.existsSync(plistPath)) return { status: "not_installed" };
+    try {
+      const result = execSync(`launchctl list ${getServiceLabel(agentId)} 2>&1`, { encoding: "utf8", stdio: "pipe" });
+      const pidMatch = result.match(/"PID"\s*=\s*(\d+)/);
+      return {
+        status: pidMatch ? "running" : "stopped",
+        pid: pidMatch ? parseInt(pidMatch[1]) : null,
+        platform: "macOS",
+        plist: plistPath,
+        logs,
+      };
+    } catch {
+      return { status: "stopped", platform: "macOS", plist: plistPath, logs };
+    }
+  }
+
+  if (platform === "linux") {
+    const unitPath = getLinuxUnitPath(agentId);
+    if (!nodeFs.existsSync(unitPath)) return { status: "not_installed" };
+    try {
+      const result = execSync(`systemctl --user is-active ${agentId} 2>&1`, { encoding: "utf8", stdio: "pipe" }).trim();
+      const pidResult = execSync(`systemctl --user show ${agentId} --property=MainPID --value 2>&1`, { encoding: "utf8", stdio: "pipe" }).trim();
+      return {
+        status: result === "active" ? "running" : result,
+        pid: parseInt(pidResult) || null,
+        platform: "Linux",
+        unit: unitPath,
+        logs,
+      };
+    } catch {
+      return { status: "stopped", platform: "Linux", unit: unitPath, logs };
+    }
+  }
+
+  fail(`Unsupported platform: ${platform}`);
 }
 
 function findMetadataInDir(dir: string): any {
@@ -1273,180 +1522,141 @@ function findMetadataInDir(dir: string): any {
   return JSON.parse(raw);
 }
 
-agentCmd.command("install")
-  .description("Install agent as a background service (auto-restarts on crash/reboot)")
+async function deployAgent(directory: string) {
+  const { execSync } = await import("node:child_process");
+  const platform = nodeOs.platform();
+  if (platform !== "darwin" && platform !== "linux") fail(`Unsupported platform: ${platform}. Only macOS and Linux are supported.`);
+
+  const absDir = nodePath.resolve(directory);
+  if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${directory}. Create an agent first: teneo agent init ${nodePath.basename(directory)}`);
+
+  const meta = findMetadataInDir(absDir);
+  const agentId = meta.agent_id || meta.agentId;
+  if (!agentId) fail("agent_id not found in metadata JSON.");
+
+  // Find or build the binary
+  let binaryPath = nodePath.join(absDir, agentId);
+  if (!nodeFs.existsSync(binaryPath)) {
+    await ensureGo();
+    console.error(JSON.stringify({ info: `Building ${agentId}...` }));
+    try {
+      execSync(`go build -o ${agentId} .`, { cwd: absDir, stdio: "pipe", timeout: 120000 });
+      console.error(JSON.stringify({ info: "Build successful." }));
+    } catch (err: any) {
+      fail(`go build failed: ${err.stderr?.toString() || err.message}`);
+    }
+  }
+
+  // Verify binary exists after build attempt
+  if (!nodeFs.existsSync(binaryPath)) fail(`Binary not found at ${binaryPath} after build.`);
+
+  // Ensure log directory exists
+  if (!nodeFs.existsSync(AGENT_LOG_DIR)) {
+    nodeFs.mkdirSync(AGENT_LOG_DIR, { recursive: true, mode: 0o700 });
+  }
+
+  if (platform === "darwin") {
+    const plistPath = getMacPlistPath(agentId);
+    const plistDir = nodePath.dirname(plistPath);
+    if (!nodeFs.existsSync(plistDir)) nodeFs.mkdirSync(plistDir, { recursive: true });
+
+    try { execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "pipe" }); } catch {}
+
+    nodeFs.writeFileSync(plistPath, generateMacPlist(agentId, binaryPath, absDir));
+    execSync(`launchctl load "${plistPath}"`, { stdio: "pipe" });
+  } else {
+    const unitPath = getLinuxUnitPath(agentId);
+    const unitDir = nodePath.dirname(unitPath);
+    if (!nodeFs.existsSync(unitDir)) nodeFs.mkdirSync(unitDir, { recursive: true });
+
+    nodeFs.writeFileSync(unitPath, generateLinuxUnit(agentId, binaryPath, absDir));
+
+    try { execSync("loginctl enable-linger $USER", { stdio: "pipe" }); } catch {}
+
+    execSync("systemctl --user daemon-reload", { stdio: "pipe" });
+    execSync(`systemctl --user enable --now ${agentId}`, { stdio: "pipe" });
+  }
+
+  console.error(JSON.stringify({ info: "Service started. Waiting for NFT mint..." }));
+  const tokenId = await waitForTokenId(agentId, 30000);
+  if (tokenId) saveTokenToRegistry(agentId, tokenId);
+
+  const service = await getLocalServiceStatus(agentId);
+  const logs = getAgentLogPaths(agentId);
+  const nextSteps = [
+    `teneo agent publish ${agentId}`,
+    `teneo agent status ${agentId}`,
+    `teneo agent logs ${agentId}`,
+  ];
+
+  if (JSON_FLAG) {
+    out({
+      status: "deployed",
+      agentId,
+      tokenId: tokenId || null,
+      service,
+      logs,
+      ...(tokenId ? {} : { warning: `NFT minting in progress — check status later: teneo agent status ${agentId}` }),
+      next_steps: nextSteps,
+    });
+    return;
+  }
+
+  console.log(`\nDeployed: ${agentId}\n`);
+  if (tokenId) {
+    console.log(`  NFT minted:  token #${tokenId} (free, gasless)`);
+  } else {
+    console.log(`  NFT minting: in progress — check status later: teneo agent status ${agentId}`);
+  }
+  console.log(`  Service:     ${service.status}${service.pid ? ` (PID ${service.pid})` : ""}`);
+  console.log(`  Logs:        ${logs.stderr}`);
+  console.log(``);
+  console.log(`  Your agent is live on the Teneo network.`);
+  console.log(`  Only you can see it right now (private).`);
+  console.log(``);
+  console.log(`  To make it public:  teneo agent publish ${agentId}`);
+  console.log(`  To check status:    teneo agent status ${agentId}`);
+  console.log(`  To view logs:       teneo agent logs ${agentId}`);
+  console.log(``);
+}
+
+agentCmd.command("deploy")
+  .description("Build, mint NFT, and start as background service")
   .argument("<directory>", "Path to the agent project directory")
   .action(async (directory: string) => {
-    const { execSync } = await import("node:child_process");
-    const platform = nodeOs.platform();
-    if (platform !== "darwin" && platform !== "linux") fail(`Unsupported platform: ${platform}. Only macOS and Linux are supported.`);
-
-    const absDir = nodePath.resolve(directory);
-    if (!nodeFs.existsSync(absDir)) fail(`Directory not found: ${absDir}`);
-
-    const meta = findMetadataInDir(absDir);
-    const agentId = meta.agent_id || meta.agentId;
-    if (!agentId) fail("agent_id not found in metadata JSON.");
-
-    // Find or build the binary
-    let binaryPath = nodePath.join(absDir, agentId);
-    if (!nodeFs.existsSync(binaryPath)) {
-      await ensureGo();
-      console.error(JSON.stringify({ info: `Binary not found, building with go build...` }));
-      try {
-        execSync(`go build -o ${agentId} .`, { cwd: absDir, stdio: "pipe", timeout: 120000 });
-        console.error(JSON.stringify({ info: "Build successful." }));
-      } catch (err: any) {
-        fail(`go build failed: ${err.stderr?.toString() || err.message}`);
-      }
-    }
-
-    // Verify binary exists after build attempt
-    if (!nodeFs.existsSync(binaryPath)) fail(`Binary not found at ${binaryPath} after build.`);
-
-    // Ensure log directory exists
-    if (!nodeFs.existsSync(AGENT_LOG_DIR)) {
-      nodeFs.mkdirSync(AGENT_LOG_DIR, { recursive: true, mode: 0o700 });
-    }
-
-    if (platform === "darwin") {
-      const plistPath = getMacPlistPath(agentId);
-      const plistDir = nodePath.dirname(plistPath);
-      if (!nodeFs.existsSync(plistDir)) nodeFs.mkdirSync(plistDir, { recursive: true });
-
-      // Unload existing service if present
-      try { execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "pipe" }); } catch {}
-
-      nodeFs.writeFileSync(plistPath, generateMacPlist(agentId, binaryPath, absDir));
-      execSync(`launchctl load "${plistPath}"`, { stdio: "pipe" });
-
-      out({
-        status: "installed",
-        agentId,
-        platform: "macOS",
-        service: getServiceLabel(agentId),
-        plist: plistPath,
-        logs: { stdout: `${AGENT_LOG_DIR}/${agentId}.out.log`, stderr: `${AGENT_LOG_DIR}/${agentId}.err.log` },
-        commands: {
-          status: `launchctl list ${getServiceLabel(agentId)}`,
-          stop: `launchctl unload "${plistPath}"`,
-          start: `launchctl load "${plistPath}"`,
-          logs: `tail -f ${AGENT_LOG_DIR}/${agentId}.err.log`,
-          uninstall: `teneo-cli agent uninstall ${agentId}`,
-        },
-      });
-    } else {
-      // Linux (systemd user unit)
-      const unitPath = getLinuxUnitPath(agentId);
-      const unitDir = nodePath.dirname(unitPath);
-      if (!nodeFs.existsSync(unitDir)) nodeFs.mkdirSync(unitDir, { recursive: true });
-
-      nodeFs.writeFileSync(unitPath, generateLinuxUnit(agentId, binaryPath, absDir));
-
-      // Enable lingering so user services survive logout
-      try { execSync("loginctl enable-linger $USER", { stdio: "pipe" }); } catch {}
-
-      execSync("systemctl --user daemon-reload", { stdio: "pipe" });
-      execSync(`systemctl --user enable --now ${agentId}`, { stdio: "pipe" });
-
-      out({
-        status: "installed",
-        agentId,
-        platform: "Linux",
-        service: `${agentId}.service`,
-        unit: unitPath,
-        commands: {
-          status: `systemctl --user status ${agentId}`,
-          stop: `systemctl --user stop ${agentId}`,
-          start: `systemctl --user start ${agentId}`,
-          logs: `journalctl --user -u ${agentId} -f`,
-          uninstall: `teneo-cli agent uninstall ${agentId}`,
-        },
-      });
-    }
+    await deployAgent(directory);
   });
 
-agentCmd.command("uninstall")
-  .description("Stop and remove agent background service")
+async function undeployAgent(agentId: string) {
+  const { execSync } = await import("node:child_process");
+  const platform = nodeOs.platform();
+
+  if (platform === "darwin") {
+    const plistPath = getMacPlistPath(agentId);
+    if (!nodeFs.existsSync(plistPath)) fail(`Service not found for "${agentId}". List services: teneo agent services`);
+
+    try { execSync(`launchctl unload "${plistPath}"`, { stdio: "pipe" }); } catch {}
+    nodeFs.unlinkSync(plistPath);
+  } else if (platform === "linux") {
+    const unitPath = getLinuxUnitPath(agentId);
+    if (!nodeFs.existsSync(unitPath)) fail(`Service not found for "${agentId}". List services: teneo agent services`);
+
+    try { execSync(`systemctl --user disable --now ${agentId}`, { stdio: "pipe" }); } catch {}
+    nodeFs.unlinkSync(unitPath);
+    try { execSync("systemctl --user daemon-reload", { stdio: "pipe" }); } catch {}
+  } else {
+    fail(`Unsupported platform: ${platform}`);
+  }
+
+  removeTokenFromRegistry(agentId);
+  out({ status: "undeployed", agentId, platform: platform === "darwin" ? "macOS" : "Linux" });
+}
+
+agentCmd.command("undeploy")
+  .description("Stop and remove background service")
   .argument("<agentId>", "Agent ID")
   .action(async (agentId: string) => {
-    const { execSync } = await import("node:child_process");
-    const platform = nodeOs.platform();
-
-    if (platform === "darwin") {
-      const plistPath = getMacPlistPath(agentId);
-      if (!nodeFs.existsSync(plistPath)) fail(`Service not found: ${plistPath}`);
-
-      try { execSync(`launchctl unload "${plistPath}"`, { stdio: "pipe" }); } catch {}
-      nodeFs.unlinkSync(plistPath);
-      out({ status: "uninstalled", agentId, platform: "macOS" });
-    } else if (platform === "linux") {
-      const unitPath = getLinuxUnitPath(agentId);
-      if (!nodeFs.existsSync(unitPath)) fail(`Service not found: ${unitPath}`);
-
-      try { execSync(`systemctl --user disable --now ${agentId}`, { stdio: "pipe" }); } catch {}
-      nodeFs.unlinkSync(unitPath);
-      try { execSync("systemctl --user daemon-reload", { stdio: "pipe" }); } catch {}
-      out({ status: "uninstalled", agentId, platform: "Linux" });
-    } else {
-      fail(`Unsupported platform: ${platform}`);
-    }
-  });
-
-agentCmd.command("service-status")
-  .description("Check if an agent is running as a background service")
-  .argument("<agentId>", "Agent ID")
-  .action(async (agentId: string) => {
-    const { execSync } = await import("node:child_process");
-    const platform = nodeOs.platform();
-
-    if (platform === "darwin") {
-      const plistPath = getMacPlistPath(agentId);
-      if (!nodeFs.existsSync(plistPath)) {
-        out({ status: "not_installed", agentId, platform: "macOS" });
-        return;
-      }
-      try {
-        const result = execSync(`launchctl list ${getServiceLabel(agentId)} 2>&1`, { encoding: "utf8", stdio: "pipe" });
-        // Parse PID from launchctl output
-        const pidMatch = result.match(/"PID"\s*=\s*(\d+)/);
-        const pid = pidMatch ? parseInt(pidMatch[1]) : null;
-        const exitMatch = result.match(/"LastExitStatus"\s*=\s*(\d+)/);
-        const lastExit = exitMatch ? parseInt(exitMatch[1]) : null;
-        out({
-          status: pid ? "running" : "stopped",
-          agentId,
-          platform: "macOS",
-          pid,
-          lastExitStatus: lastExit,
-          plist: plistPath,
-          logs: { stdout: `${AGENT_LOG_DIR}/${agentId}.out.log`, stderr: `${AGENT_LOG_DIR}/${agentId}.err.log` },
-        });
-      } catch {
-        out({ status: "stopped", agentId, platform: "macOS", plist: plistPath });
-      }
-    } else if (platform === "linux") {
-      const unitPath = getLinuxUnitPath(agentId);
-      if (!nodeFs.existsSync(unitPath)) {
-        out({ status: "not_installed", agentId, platform: "Linux" });
-        return;
-      }
-      try {
-        const result = execSync(`systemctl --user is-active ${agentId} 2>&1`, { encoding: "utf8", stdio: "pipe" }).trim();
-        const pidResult = execSync(`systemctl --user show ${agentId} --property=MainPID --value 2>&1`, { encoding: "utf8", stdio: "pipe" }).trim();
-        out({
-          status: result === "active" ? "running" : result,
-          agentId,
-          platform: "Linux",
-          pid: parseInt(pidResult) || null,
-          unit: unitPath,
-        });
-      } catch (err: any) {
-        out({ status: "stopped", agentId, platform: "Linux", unit: unitPath });
-      }
-    } else {
-      fail(`Unsupported platform: ${platform}`);
-    }
+    await undeployAgent(agentId);
   });
 
 agentCmd.command("services")
@@ -1553,7 +1763,7 @@ if (process.argv.includes("--dump-commands")) {
       arguments: cmd.registeredArguments.map((a) => ({ name: a.name(), description: a.description, required: a.required })),
       options: cmd.options.map((o) => ({ flags: o.flags, description: o.description, defaultValue: o.defaultValue })),
     };
-    // Include subcommands (e.g. agent init, agent install, etc.)
+    // Include subcommands (e.g. agent init, agent deploy, etc.)
     const subs = cmd.commands;
     if (subs && subs.length > 0) {
       entry.subcommands = subs.map(dumpCommand);
@@ -1567,4 +1777,10 @@ if (process.argv.includes("--dump-commands")) {
 
 // ─── Parse ───────────────────────────────────────────────────────────────────
 
-program.parseAsync(process.argv).catch((err) => fail(err.message || String(err)));
+program.parseAsync(process.argv)
+  .then(() => {
+    // Let stdout flush completely before forcing exit (avoids truncation when piped).
+    // Set a short timeout to allow the event loop to drain pending I/O, then exit.
+    setTimeout(() => process.exit(0), 100).unref();
+  })
+  .catch((err) => fail(err.message || String(err)));

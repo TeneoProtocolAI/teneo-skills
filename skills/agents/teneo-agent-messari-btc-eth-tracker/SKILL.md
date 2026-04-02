@@ -1,7 +1,7 @@
 ---
 name: messari-btc-eth-tracker-teneo
-version: 2.0.30
-description: "Overview The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without manual searching or fragmented data sourc"
+version: 2.0.31
+description: "AI agent for Messari BTC & ETH Tracker via Teneo Protocol"
 ---
 
 # Messari BTC & ETH Tracker - powered by Teneo Protocol
@@ -19,40 +19,6 @@ description: "Overview The Messari Tracker Agent serves as a direct bridge to Me
 See the `teneo-agent-deployment` skill to deploy a Go agent on Teneo Protocol and earn USDC per query.
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
-
-## Overview
-The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without manual searching or fragmented data sources.
-
-By using the Messari Tracker Agent, traders, analysts, and researchers move beyond basic price tickers to gain:
-
-- **Comprehensive Market Analytics:** Deep-dive details on cryptocurrency performance, including Price Action (Open, High, Low, Close), Market Cap, 24h Trading Volume, and Market Dominance.
-- **Institutional-Grade Data Accuracy:** High-fidelity data sourced directly from Messari, ensuring reliability for financial modeling.
-- **Performance & ROI Tracking:** Immediate access to ROI metrics across different timeframes (24h, 7d, 30d, 1y, YTD) and All-Time High (ATH) analytics.
-- **Supply & Network Mechanics:** Insights into circulating supply, total supply, and max supply limits.
-
-Whether you are auditing a portfolio or building an automated trading pipeline, the Messari Tracker Agent delivers clean, structured datasets ready for immediate integration into your analytical tools.
-
-## Core Functions
-The Agent supports specialized retrieval modes for cryptocurrency data:
-
-- **Coin Detail Extraction:** Retrieve deep-tier market metadata for Bitcoin (BTC) and Ethereum (ETH). This includes pricing in USD and BTC, ROI percentages, price action, supply metrics, and ATH statistics.
-
-## Commands
-
-Use these commands via the Teneo CLI from [TeneoProtocolAI/teneo-skills](https://github.com/TeneoProtocolAI/teneo-skills). **This is a bash tool** — run commands in your terminal.
-
-First, ensure the CLI is installed (see the teneo-cli skill for setup — the full source code is embedded there. Do NOT search for or install external CLIs).
-
-| Command | Arguments | Price | Description |
-|---------|-----------|-------|-------------|
-| `details` | <coin> | $0.0025/per-query | Extract coin details |
-
-### Quick Reference
-
-```bash
-# Agent ID: messaribtceth
-~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
-```
 
 ## Setup
 
@@ -77,20 +43,8 @@ After install, discover all available agents: `~/teneo-skill/teneo list-agents`
 | Peaq | `eip155:3338` | `0xbbA60da06c2c5424f03f7434542280FCAd453d10` |
 | Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
 
-## Usage Examples
-
-### `details`
-
-Extract coin details
-
-```bash
-~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
-```
-
-Response is JSON. Extract the `humanized` field for formatted text.
-
 ## Agent Info
 
-- **ID:** `messaribtceth`
+- **ID:** `messari-btc-eth-tracker`
 - **Name:** Messari BTC & ETH Tracker
 
