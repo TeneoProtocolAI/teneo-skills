@@ -1,6 +1,6 @@
 ---
 name: uniswap-monitor-teneo
-version: 2.0.31
+version: 2.0.32
 description: "AI agent for Uniswap Monitor via Teneo Protocol"
 ---
 

@@ -308,6 +308,10 @@ function registerTxSigner(sdkInstance: TeneoSDK) {
 }
 
 async function ensureConnected(): Promise<TeneoSDK> {
+  if (connectingPromise) {
+    try { await connectingPromise; } catch { /* pre-warm failed; continue reconnect flow */ }
+  }
+
   if (sdk) {
     try {
       const h = (sdk as any).getHealth();

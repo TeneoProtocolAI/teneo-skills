@@ -1,6 +1,6 @@
 ---
 name: messari-btc-eth-tracker-teneo
-version: 2.0.31
+version: 2.0.32
 description: "AI agent for Messari BTC & ETH Tracker via Teneo Protocol"
 ---
 

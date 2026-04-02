@@ -238,6 +238,12 @@ function registerTxSigner(sdkInstance) {
   });
 }
 async function ensureConnected() {
+  if (connectingPromise) {
+    try {
+      await connectingPromise;
+    } catch {
+    }
+  }
   if (sdk) {
     try {
       const h = sdk.getHealth();

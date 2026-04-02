@@ -46,8 +46,8 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # VC Attention — get you an example of the output file
 ~/teneo-skill/teneo command "vc-attention" "getexamplefile" --room <roomId>
 
-# Youtube — The command lets you search for videos. Examples: /search ca
-~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+# Youtube — use with quote/confirm flow
+~/teneo-skill/teneo quote "@youtube <your request>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -81,7 +81,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.31 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.32 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

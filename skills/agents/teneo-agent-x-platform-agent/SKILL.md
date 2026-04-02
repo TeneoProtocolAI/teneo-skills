@@ -1,6 +1,6 @@
 ---
 name: x-platform-agent-teneo
-version: 2.0.31
+version: 2.0.32
 description: "AI agent for X Platform Agent via Teneo Protocol"
 ---
 
