@@ -6,230 +6,259 @@ homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
 ---
 
-# teneo-cli — Query AI Agents on the Teneo Protocol Network
+# teneo-cli
 
-## Purpose
+## Use This Skill When
 
-**Teneo Protocol** is a decentralized network of 400+ AI agents that provide real-time data — social media profiles, crypto prices, hotel availability, news, analytics, Amazon products, and more. Agents are paid per query in USDC via [x402](https://x402.org) micropayments.
+- The user needs live data from a Teneo network agent, including social media, crypto, analytics, news, or e-commerce data.
+- The user needs to inspect agents, commands, or pricing before querying.
+- The user needs room or wallet operations tied to Teneo.
+- The user wants to create, deploy, debug, or publish their own Teneo agent.
 
-This is a **CLI tool** (TypeScript/Node.js) for querying agents from the terminal. A background **daemon** maintains a persistent WebSocket connection so commands execute instantly without reconnecting every time.
+## Non-Negotiables
 
-**What you can do:**
-1. **Discover** every agent on the network — commands, pricing, capabilities
-2. **Query** agents directly — free agents auto-confirm, paid agents auto-pay via USDC
-3. **Manage rooms** — create rooms, add/remove agents (max 5 per room)
-4. **Handle payments** — automatic USDC on Base, Peaq, Avalanche, or X Layer with auto-retry across chains
-5. **Sign transactions** — auto-sign all on-chain requests from agents (swaps, transfers, approvals)
-6. **Manage wallets** — encrypted wallet storage, balance checks, withdrawals
-7. **Deploy your own agents** — scaffold a Go project, validate metadata, deploy as a background service, and publish it
+1. Use only the bundled CLI at `~/teneo-skill/teneo`.
+2. If the CLI is missing, install only via `npx -y @teneo-protocol/cli`.
+3. Run Teneo commands one at a time. Do not run them in parallel.
+4. Wait for process exit before parsing stdout.
+5. Prefer `--json` on commands you need to parse or depend on for machine-readable errors.
+6. Do not invent agent IDs, command syntax, room IDs, or paths. Discover them from the CLI.
+7. Do not claim a deploy worked from partial output. Confirm with `agent status`, `agent logs`, and `agent services`.
+8. The current CLI does not expose the old manual transaction approval workflow. Do not mention or use it.
+9. This repo no longer ships a separate deployment skill. Use the `agent` workflow in this skill.
 
-**Use this skill when** you need real-time data from a Teneo agent — social media (X/Twitter, Instagram, TikTok, LinkedIn), hotel search, crypto prices, gas fees, Amazon products, news, and more. Also use it when you want to **deploy your own agent** on the network.
+## Install And Verify
 
----
-
-## Prerequisites
-
-- **Node.js 18+** (required)
-- **USDC on a supported chain** (Base, Peaq, Avalanche, or X Layer) if querying paid agents
-- A wallet is **auto-generated on first use** — no manual key setup needed. You can optionally set `TENEO_PRIVATE_KEY` to use an existing key.
-
----
-
-## Installation — MUST Run Before First Use
-
-**IMPORTANT: This skill provides its OWN CLI. Do NOT search the web for alternative CLIs, do NOT install external repos or any Python-based Teneo tools. Those are completely unrelated projects.**
-
-**Before running ANY command, you MUST check if the CLI is installed and install it if not.**
-
-### Step 1: Check if the CLI exists and get version
+Check whether the CLI exists:
 
 ```bash
-test -f ~/teneo-skill/teneo && ~/teneo-skill/teneo --version || echo "NOT_INSTALLED"
+test -f ~/teneo-skill/teneo && ~/teneo-skill/teneo version || echo "NOT_INSTALLED"
 ```
 
-### Step 2: If NOT_INSTALLED, kill any running daemon and install
+If missing, install it:
 
 ```bash
-pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
+pkill -f '/teneo-skill/daemon' 2>/dev/null || true
+npx -y @teneo-protocol/cli
 ```
 
-This kills any lingering `npx` daemon process (which would cause conflicts), then installs the CLI to `~/teneo-skill/` and sets up all skills automatically.
-
-### Step 3: Verify installation and get version
+Verify install and connectivity:
 
 ```bash
-~/teneo-skill/teneo health && ~/teneo-skill/teneo --version
+~/teneo-skill/teneo health --json
+~/teneo-skill/teneo version
 ```
 
-You should see JSON output with connection status and the CLI version number.
+## Output Rules
 
-### Step 4: Discover all available agents
+- Most operational commands return JSON on stdout.
+- Use `--json` when you need structured errors as well as structured success output.
+- `version` is plain text.
+- `export-login` is plain text shell output.
+- `agent logs` is plain text.
+- `wallet-export-key` prints a warning on stderr and JSON on stdout.
+- Only the `command` subcommand has a CLI `--timeout` flag. Use shell timeouts for other long-running commands.
+- Use at least a 120 second shell timeout for `discover`, `list-agents`, `info`, `command`, `quote`, and agent deployment operations.
+
+## Default Query Workflow
+
+Use this exact sequence unless the user explicitly asks for something else.
+
+1. Verify install and health.
+2. Find the agent with `list-agents --search`.
+3. Inspect the chosen agent with `info`.
+4. Run the exact command with `command`.
+5. Use `quote` only when the user wants a price check before execution.
+
+Typical flow:
 
 ```bash
-~/teneo-skill/teneo list-agents
+~/teneo-skill/teneo list-agents --search "keyword" --json
+~/teneo-skill/teneo info <agentId> --json
+~/teneo-skill/teneo command "<agentId>" "<exact trigger and args>" --json
 ```
 
-**Always tell the user the installed version and which agents are available.** Example:
+Notes:
 
-> Teneo CLI v2.1.0 installed. Found 12 agents on the network:
-> - Cross-chain swap agent — token swaps across chains
-> - X Platform Agent — Twitter/X data
-> - ...
+- `command` auto-resolves a room if `--room` is omitted.
+- `command` auto-adds the target agent when needed.
+- `command` handles payment automatically.
+- Use `--chain` or `--network` only when the user wants a specific payment chain.
+- Do not guess command syntax. Always inspect `info <agentId>` first.
 
----
-
-## How to Run Commands
-
-**All commands are run as bash commands:**
+Optional price check:
 
 ```bash
-~/teneo-skill/teneo <command> [arguments] [options]
+~/teneo-skill/teneo quote "@<agentId> <request>" --json
 ```
 
-**Example:**
-```bash
-~/teneo-skill/teneo list-agents
-~/teneo-skill/teneo info x-agent-enterprise-v2
-~/teneo-skill/teneo command "x-agent-enterprise-v2" "user @elonmusk"
-```
+## Discovery Rules
 
-**All output is JSON to stdout.** Parse the JSON to extract results. Room is auto-resolved — you don't need `--room` for most commands.
+- Prefer `list-agents --search "<keyword>" --json` for targeted lookup.
+- Use `info <agentId> --json` before executing any unfamiliar agent command.
+- Use `discover --json` only when you genuinely need the full manifest.
+- Use internal agent IDs, never display names.
 
----
+If the user gives a social profile name without an `@handle`, find the correct handle first. Do not guess paid queries against an uncertain handle.
 
-## Authentication
+## Rooms
 
-The CLI **auto-generates an encrypted wallet on first use** — no manual key setup required. Just install and start querying. The wallet is used for:
-- **Authentication** — signs the WebSocket handshake to prove identity on Teneo
-- **Payment** — signs x402 USDC transactions to pay agents
-- **TX signing** — signs on-chain transactions (approvals, swaps, bridges) requested by agents
+Manual room management is optional for normal querying because `command` auto-resolves rooms and auto-adds agents.
 
-### Bring your own key (optional)
-
-If you already have a wallet, you can provide it instead of auto-generating:
-
-#### Environment variable (highest priority)
+Use room commands only when the user explicitly wants room control or when you need to debug room state:
 
 ```bash
-export TENEO_PRIVATE_KEY=<your-64-hex-char-private-key>
+~/teneo-skill/teneo rooms --json
+~/teneo-skill/teneo room-agents <roomId> --json
+~/teneo-skill/teneo room-available-agents <roomId> --json
+~/teneo-skill/teneo create-room "Task Room" --json
+~/teneo-skill/teneo add-agent <roomId> <agentId> --json
+~/teneo-skill/teneo remove-agent <roomId> <agentId> --json
+~/teneo-skill/teneo delete-room <roomId> --json
 ```
 
-#### .env file (auto-loaded from ~/teneo-skill/)
+Guidance:
+
+- Rooms are capped at 5 agents.
+- `subscribe` and `unsubscribe` are niche public-room commands. Do not use them in normal workflows.
+- `update-room` exists, but do not depend on it in the standard workflow. The live backend may return a timeout.
+
+## Wallets And Payments
+
+The CLI auto-generates a wallet on first use unless `TENEO_PRIVATE_KEY` is set.
+
+Useful commands:
 
 ```bash
-echo "TENEO_PRIVATE_KEY=<your-64-hex-char-private-key>" > ~/teneo-skill/.env
+~/teneo-skill/teneo wallet-init --json
+~/teneo-skill/teneo wallet-address --json
+~/teneo-skill/teneo wallet-pubkey --json
+~/teneo-skill/teneo wallet-balance --json
+~/teneo-skill/teneo check-balance --json
+~/teneo-skill/teneo export-login
 ```
 
-#### Export from existing wallet
+Supported payment chains:
+
+- `base`
+- `avax`
+- `peaq`
+- `xlayer`
+
+If payment fails:
+
+1. Run `check-balance --json`.
+2. If all balances are empty, stop and ask the user to fund the wallet.
+3. If only one chain is funded, retry with `--chain <chain>`.
+
+## Agent Deployment
+
+Use a deterministic, non-interactive flow. Do not let the LLM improvise an interactive conversation around `agent init`.
+
+### One-Shot Init
+
+Run init from a known parent directory so the resulting path is predictable:
 
 ```bash
-eval $(~/teneo-skill/teneo export-login)
+cd ~/teneo-skill
+~/teneo-skill/teneo agent init "My Agent" \
+  --id my-agent \
+  --type command \
+  --description "Full description of what the agent does." \
+  --short-description "One-line summary." \
+  --category "Utility" \
+  --json
 ```
 
-This prints `export TENEO_PRIVATE_KEY=...` for shell reuse.
+Rules:
 
-### Wallet Security
+- Always pass `--id`, `--description`, `--short-description`, and `--category`.
+- Prefer running init from `~/teneo-skill` so the project path is `~/teneo-skill/<agent-id>`.
+- If init runs elsewhere, use the exact created path from the command output. Never guess the directory later.
 
-- Private key encrypted at rest with **AES-256-GCM**
-- Master secret and wallet data in **separate files** (leaking one is useless without the other)
-- Both files have `0600` permissions (owner-only read/write)
-- Key **NEVER** logged, transmitted, or included in any API call — only cryptographic signatures are sent
+### Validate, Deploy, Verify, Publish
 
-### Funding the wallet
+```bash
+~/teneo-skill/teneo agent validate ~/teneo-skill/my-agent/my-agent-metadata.json --json
+~/teneo-skill/teneo agent deploy ~/teneo-skill/my-agent --json
+~/teneo-skill/teneo agent status my-agent --json
+~/teneo-skill/teneo agent logs my-agent --no-follow
+~/teneo-skill/teneo agent services --json
+~/teneo-skill/teneo agent publish my-agent --json
+```
 
-1. Run `~/teneo-skill/teneo wallet-address` — the wallet address is printed
-2. Send USDC to that address on Base, Peaq, Avalanche, or X Layer
-3. Check balances: `~/teneo-skill/teneo check-balance`
+Rules:
 
----
+- `agent deploy` builds the Go binary, mints the NFT identity, and installs the service.
+- Only say the agent is deployed after checking `agent status` and `agent services`.
+- If status is `stopped` or `offline`, do not claim success. Read logs first.
+- Publish only after deploy has succeeded and the service is healthy.
 
-## IMPORTANT: Always Show Status Updates
+### When Deploy Fails
 
-Teneo commands can take 10-30+ seconds. **Never leave the user staring at a blank screen.** Before and during every step, send a short status message so the user knows what's happening.
+If `agent status` shows `stopped` or `offline`, do this immediately:
 
-**Example flow when a user asks "search @elonmusk on X":**
+```bash
+~/teneo-skill/teneo agent status <agentId> --json
+~/teneo-skill/teneo agent logs <agentId> --no-follow
+~/teneo-skill/teneo agent services --json
+```
 
-> Checking which agents are in the room...
-> X Platform Agent is in the room.
-> Requesting price quote for the search...
-> Quote received: 0.05 USDC. Confirming payment...
-> Payment confirmed. Waiting for agent response...
-> Here are the results:
+Then check the underlying service manager if needed:
 
-**Rules:**
-1. **Before every CLI command**, tell the user what you're about to do in plain language
-2. **After each step completes**, confirm it before moving to the next step
-3. **If something takes more than a few seconds**, send a "still waiting..." or "processing..." update
-4. **On errors**, explain what went wrong and what you'll try next — don't just silently retry
+```bash
+# Linux
+systemctl --user status <agentId> --no-pager
+journalctl --user -u <agentId> -n 200 --no-pager
 
-**Never run multiple commands in silence.** Each step should have a visible status update.
+# macOS
+launchctl list | grep ai.teneo.agent
+cat ~/.teneo-wallet/logs/<agentId>.err.log
+```
 
----
+Common causes:
 
-## CRITICAL: Wait for Complete Output Before Responding
+- Invalid or incomplete metadata.
+- Agent directory/path guessed incorrectly after init.
+- Service started but the binary exited during startup.
+- Agent ID already taken or publish/deploy state inconsistent.
+- Agent `.env` missing expected values or manually edited incorrectly.
 
-Every `~/teneo-skill/teneo` command outputs a **single JSON object** to stdout. The output is **only valid and complete when the process exits**. Follow these rules strictly:
+## Remote Server Notes
 
-1. **Never parse or respond based on partial output.** If you see incomplete or malformed JSON, the command is still running — wait for it to finish.
-2. **Wait for the process exit code** before reading stdout. Exit 0 = success, non-zero = error (details on stderr).
-3. **Set a shell timeout of at least 120 seconds** for all Teneo CLI commands. Agent queries (`command`, `quote`, `confirm`) take 10-30 seconds. Discovery commands (`list-agents`, `discover`) return large JSON payloads. **Note:** The CLI `--timeout` flag only exists on the `command` subcommand. Do NOT pass `--timeout` to `list-agents`, `info`, `discover`, or other commands — they will error.
-4. **Run Teneo commands one at a time, never in parallel.** Each command talks to the background daemon — parallel commands may conflict.
-5. **Prefer targeted queries over full discovery** to reduce output size:
-   - Use `list-agents --search "keyword"` instead of `list-agents` when looking for a specific agent
-   - Use `info <agentId>` for one agent's details instead of `discover` for all agents
-   - Only use `discover` when you genuinely need the complete manifest
+On remote hosts, keep the flow explicit:
 
-**If the output appears truncated or you get a JSON parse error, the command was still running when you read the output. Wait longer.**
+```bash
+~/teneo-skill/teneo daemon stop || true
+export TENEO_DAEMON_PORT=19888
+~/teneo-skill/teneo daemon start --json
+```
 
----
+Use a non-default daemon port when the normal port is busy or startup is unreliable.
 
-## IMPORTANT: Agent Discovery & Room Limits
+If daemon startup still fails, do not continue guessing. Inspect the actual error first.
 
-### Finding Agents
+## Error Handling
 
-Teneo has many agents available across the entire network. Use these commands to discover them:
+- `agent not found or disconnected`: find an alternative agent or retry after checking `info`.
+- `room is full`: remove an agent or create a fresh room.
+- `insufficient funds`: run `check-balance --json` and fund the wallet.
+- `Daemon failed to start`: stop the daemon, change `TENEO_DAEMON_PORT`, retry, then inspect logs.
+- `Room update timeout`: avoid `update-room` unless the user explicitly needs it.
 
-- **`discover`** -> full JSON manifest of **ALL agents** with commands, pricing, capabilities, `fee_config`, `payment_networks`, and `command_index` — designed for AI agent consumption
-- **`list-agents`** -> shows all agents with their IDs, commands, capabilities, and pricing. Supports `--online`, `--free`, `--search` filters.
-- **`info <agentId>`** -> full details for one agent (commands with exact syntax + pricing)
-- **`room-agents <roomId>`** -> shows agents currently IN your room
-- **`room-available-agents <roomId>`** -> shows agents available to ADD to your room
+## Environment Variables
 
-**IMPORTANT: Agent IDs vs Display Names.** Agents have an internal ID (e.g. `x-agent-enterprise-v2`) and a display name (e.g. "X Platform Agent"). **You must always use the internal ID** for commands — display names with spaces will fail validation.
+| Variable | Purpose |
+|----------|---------|
+| `TENEO_PRIVATE_KEY` | Use an existing wallet instead of auto-generated storage |
+| `TENEO_DEFAULT_ROOM` | Default room ID |
+| `TENEO_DEFAULT_CHAIN` | Default payment chain |
+| `TENEO_WS_URL` | Override backend WebSocket endpoint |
+| `TENEO_DAEMON_PORT` | Override daemon port |
 
-### Agent "Online" does not mean Reachable
+The CLI auto-loads `~/teneo-skill/.env`.
 
-An agent can show `"status": "online"` in `info` but still be **disconnected in your room**. The coordinator will report "agent not found or disconnected" when you try to query it. This means:
-- Always **test an agent with a cheap command first** before relying on it
-- If an agent is disconnected, **look for alternative agents** that serve the same purpose
-- Multiple agents often serve overlapping purposes — know your fallbacks
-
-### Pre-Query Checklist
-
-Before **every** agent query, follow this checklist:
-
-1. **Find the agent's room** — run `~/teneo-skill/teneo room-agents <roomId>` on your rooms to confirm which room has the target agent. Do NOT assume the default room — agents may be in a different room. If the agent isn't in any room, add it first.
-2. **Get agent commands** — run `~/teneo-skill/teneo info <agentId>` to see exact command syntax and pricing. Never guess commands.
-3. **Check agent status** — if offline or disconnected, do NOT add to room or query. Find an alternative.
-4. **Check room capacity** — if the room has 5 agents already, remove one or create a new room.
-5. **Know your fallbacks** — if your target agent is unreachable, check for similar agents already in the room.
-6. **For social media handles** — web search first to find the correct `@handle` before querying. Wrong handles waste money.
-
-### Room Rules
-
-Teneo organizes agents into **rooms**. You MUST understand these rules:
-
-1. **Maximum 5 agents per room.** A room can hold at most 5 agents at a time.
-2. **You can only query agents that are in your room.** If an agent is not in the room, commands to it will fail.
-3. **To use a different agent**, find it with `list-agents`, then add it with `add-agent <roomId> <agentId>`.
-4. **If the room already has 5 agents**, you must first remove one with `remove-agent <roomId> <agentId>` before adding another.
-5. **Check who is in the room** with `room-agents <roomId>` before sending commands.
-
-**If the room is full or things get confusing**, you can always create a fresh room with `create-room "Task Name"` and invite only the agent(s) needed for the current task.
-
-**The `command` handler auto-manages rooms:** it checks if the agent is in any of your rooms, finds the best room, and adds the agent automatically. You only need manual room management for advanced use cases.
-
----
+## Command Reference
 
 <!-- COMMAND_REFERENCE -->
 ## Command Reference
@@ -775,119 +804,7 @@ Show installed and latest available version
 
 <!-- /COMMAND_REFERENCE -->
 
----
-
-## Pricing & Payment
-
-### Pricing Model
-
-Every command has a pricing model. Check `pricePerUnit` and `taskUnit` in agent details before executing.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `pricePerUnit` | number | USDC amount per unit. `0` or absent = free. |
-| `taskUnit` | string | `"per-query"` = flat fee per call. `"per-item"` = price x item count. |
-
-### Supported Payment Networks
-
-| Network | Chain ID | USDC Contract |
-|---------|----------|---------------|
-| Base | `eip155:8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Peaq | `eip155:3338` | `0xbbA60da06c2c5424f03f7434542280FCAd453d10` |
-| Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
-| X Layer | `eip155:196` | `0x74b7F16337b8972027F6196A17a631aC6dE26d22` |
-
-### Payment Flow
-
-1. You send a `command` to an agent
-2. The SDK requests a price quote from the agent
-3. If free (price=0), auto-confirms immediately
-4. If paid, auto-signs an x402 USDC payment and confirms
-5. Agent processes the request and returns data
-
-### Payment Network Auto-Retry
-
-If the payment fails on the default chain (e.g. insufficient USDC on Base), the CLI **automatically checks your balances on all supported chains** and retries on the next funded chain in priority order: Base -> Avalanche -> X Layer -> Peaq.
-
-To force a specific chain, use `--chain` or `--network`:
-
-```bash
-~/teneo-skill/teneo command "<swap-agent-id>" "swap 0.5 USDC base USDC avalanche" --chain avalanche
-```
-
-### Check Balances Before Querying
-
-```bash
-~/teneo-skill/teneo check-balance
-```
-
-Returns USDC balances across all payment networks and recommends which chain to use. You can also check a specific chain:
-
-```bash
-~/teneo-skill/teneo check-balance --chain base
-```
-
----
-
-## On-Chain Transaction Signing
-
-Some agents (e.g. swap/bridge agents) request on-chain transactions. The CLI handles these automatically.
-
-### Default behavior (auto-sign)
-
-By default, transactions are **signed, broadcast, and confirmed automatically**:
-
-1. Agent sends `trigger_wallet_tx` with transaction details
-2. CLI signs and broadcasts the transaction
-3. CLI sends `broadcasted` status to agent
-4. CLI waits for on-chain confirmation (checks for reverts)
-5. CLI sends `confirmed` (or `failed` if reverted) to agent
-6. For multi-step flows (e.g. approval -> swap), the agent sends the next transaction and the cycle repeats
-
-**All transactions are auto-signed by default.** No manual approval is needed — the CLI handles payment signing, on-chain transaction signing, and multi-step flows (approvals, swaps, bridges) automatically.
-
-### Manual approval mode (`--no-auto-sign-tx`)
-
-If you want to review transactions before signing:
-
-```bash
-~/teneo-skill/teneo command "<swap-agent-id>" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
-```
-
-When a transaction is requested:
-- The CLI **queues** it instead of signing
-- The transaction details are returned in the response (to, value, chainId, data, description)
-- You can then approve or reject:
-
-```bash
-# See what's waiting
-~/teneo-skill/teneo pending-txs
-
-# Approve a specific transaction
-~/teneo-skill/teneo approve-tx <taskId>
-
-# Reject a specific transaction
-~/teneo-skill/teneo reject-tx <taskId>
-```
-
-This is useful when an AI agent is executing commands on your behalf and you want to review on-chain actions before they happen.
-
----
-
-## Typical Workflow
-
-1. **Install the CLI** — follow the Installation section above if `~/teneo-skill/teneo` doesn't exist
-2. **Ensure wallet is funded** — run `~/teneo-skill/teneo check-balance` to check USDC. If empty, get the address with `~/teneo-skill/teneo wallet-address` and ask the user to send USDC.
-3. **Discover agents** — run `~/teneo-skill/teneo list-agents` or `~/teneo-skill/teneo list-agents --search "keyword"` to find the agent matching the user's request. **Use the user's exact search term** — don't substitute similar agents.
-4. **Check room membership** — run `~/teneo-skill/teneo room-agents <roomId>` to see which agents are in which rooms. This tells you if the target agent is already available and which room to use.
-5. **Send a command**: `~/teneo-skill/teneo command "<agentId>" "<trigger> <argument>"` — **always use `command`**. It handles everything: auto-resolves room, auto-adds agent, auto-pays, auto-signs transactions, auto-retries on different payment networks.
-6. **Swap agents** as needed — if an agent is dead, find an alternative.
-
-**IMPORTANT: Always use `command`.** It handles everything: payment, room management, agent autosummon, TX signing, multi-step flows (swaps, approvals, bridges), and payment network retry automatically.
-
-**NOTE: Examples in this document use generic placeholders like `<swap-agent-id>`.** Always run `list-agents --search "keyword"` to find the **exact agent the user asks for** — do not default to a specific agent just because it appears in an example. Multiple agents may serve the same purpose (e.g. cross-chain swaps); use the one the user requests.
-
-### Agent Examples (auto-generated from live network)
+## Live Agent Examples
 
 <!-- AGENT_EXAMPLES -->
 ```bash
@@ -941,229 +858,7 @@ This is useful when an AI agent is executing commands on your behalf and you wan
 ```
 <!-- /AGENT_EXAMPLES -->
 
----
-
-## Searching for Users / Handles on Platforms
-
-When a user asks to look up a social media account, there are two paths:
-
-### With `@` handle (direct query)
-If the user provides an exact handle with `@` (e.g. `@teneo_protocol`), query the agent directly — this will fetch the profile immediately without searching first.
-
-### Without `@` (web search first, then query)
-If the user provides a name without `@` (e.g. "teneo protocol"), you **must find the correct handle first**. **Never guess handles** — wrong handles waste money ($0.001 each) and return wrong data.
-
-**Step 1: Web search to find the correct handle.** Tell the user:
-> "Searching the web for the correct handle..."
-
-Use a web search (not the Teneo agent) to find the official handle. Look for:
-- The most prominent result (highest followers, verified badge)
-- Official website links that confirm the handle
-- Be careful of impostor/dead accounts with similar names
-
-**Step 2: Check for handle changes.** Sometimes an account's bio says "we are now @newhandle on X" (e.g. `@peaqnetwork` -> `@peaq`). If you see this, use the new handle.
-
-**Step 3: Query with the confirmed handle.**
-
-**Always tell the user on first use:** Using `@handle` (e.g. `@teneo_protocol`) queries directly and is faster. Without the `@`, I need to search the web first to find the right handle.
-
----
-
-## For AI Agent Integration
-
-### Recommended workflow
-
-#### Step 1: Install the CLI and check version
-
-```bash
-test -f ~/teneo-skill/teneo && ~/teneo-skill/teneo --version || echo "NOT_INSTALLED"
-```
-
-If NOT_INSTALLED, follow the Installation section above.
-
-#### Step 2: Discover all available agents
-
-```bash
-~/teneo-skill/teneo list-agents
-```
-
-**Wait for this command to fully complete and return its exit code before proceeding.** This returns all agents with IDs, command counts, and capabilities. The output is a single JSON object — do not attempt to parse it until the command has fully exited. Tell the user which version is installed and what agents are available.
-
-#### Step 3: Get details for agents matching the user's intent
-
-```bash
-~/teneo-skill/teneo info <agentId>
-```
-
-**Wait for the full JSON response.** Do not proceed until you have the complete agent details. This returns the agent's exact command syntax, arguments, and pricing. Always run this before sending a command.
-
-#### Step 4 (optional): Full manifest for caching
-
-```bash
-~/teneo-skill/teneo discover
-```
-
-Full JSON manifest including `agents`, `command_index`, `fee_config`, `payment_networks`, and `pricing_semantics` — designed for AI agent consumption. **Warning: this returns a large JSON payload. Wait for complete output. Prefer `list-agents --search` and `info` for targeted lookups.** Cache this output.
-
-#### Step 5: Match user intent to a command
-
-Search agent descriptions and command triggers semantically. Check pricing to inform the user about cost before executing.
-
-**Example matching logic:**
-- User says "What's Elon's Twitter?" -> match `@x-agent-enterprise-v2 user <username>`
-- User says "Find hotels in Vienna" -> match `@hotel-finder search <city>`
-- User says "ETH gas price" -> match `@gas-sniper-agent gas <chain>`
-
-#### Step 6: Execute the query
-
-```bash
-~/teneo-skill/teneo command "<agentId>" "<trigger> <argument>"
-```
-
-Room is auto-resolved. Agent is auto-added if not in room. Payment is auto-signed. All on-chain transactions (swaps, bridges) are auto-signed. Payment network auto-retries if funds are insufficient on the default chain.
-
-**All transactions (payments AND on-chain swaps/bridges) are auto-signed by default. Do NOT use `approve-tx` or `pending-txs` unless the user explicitly passed `--no-auto-sign-tx`.** The normal flow requires no manual approval — just run the command and wait for the result.
-
-Only if the user explicitly asks to review transactions before signing, use `--no-auto-sign-tx`:
-
-```bash
-~/teneo-skill/teneo command "<swap-agent-id>" "swap 0.5 USDC base USDC avalanche" --no-auto-sign-tx
-```
-
-Then show the pending TX details to the user and run `approve-tx <taskId>` or `reject-tx <taskId>`.
-
-**This command may take 10-30 seconds for paid agent queries. Wait for the complete response. Do not summarize or present results to the user until the command has exited and you have the full JSON output.**
-
-#### Step 7: Parse the response
-
-All commands return JSON to stdout. The output is complete **only when the process exits**. Extract the `humanized` field for formatted text, or `raw` for structured data.
-
-If the response contains a `_payment_retry` field, it means the payment failed on the first network and was automatically retried on another.
-
-#### Step 8: Handle errors
-
-| Error | Meaning | Action |
-|-------|---------|--------|
-| `"agent not found or disconnected"` | Agent offline in your room | Find alternative agent, or kick and re-add |
-| `"room is full"` | 5 agents already in room | Remove one or create new room |
-| `"insufficient funds"` | Wallet lacks USDC on all chains | Check balance with `check-balance`, fund wallet |
-| `"Direct-agent mismatch"` | Coordinator routed to wrong agent | Retry, or specify the agent directly |
-| `"timeout"` | No response in time | Retry once, then try different agent |
-| `"All N attempts failed"` | SDK connection failed | Check network, wait and retry |
-
-The `command` handler automatically resolves rooms, adds agents, swaps out agents when the room is full, and retries payments on different networks. No manual room management needed.
-
----
-
-## Error Handling
-
-### `agent not found or disconnected`
-**Cause:** Agent shows online but is disconnected in your room.
-**Fix:** Test with a cheap command first. If disconnected, find an alternative agent. Multiple agents often serve overlapping purposes (e.g. if `messari` is dead, `coinmarketcap-agent` can provide crypto quotes).
-
-### `Room is full (max 5 agents)`
-**Cause:** Room already has 5 agents.
-**Fix:** Remove an unused agent with `remove-agent <roomId> <agentId>`, or create a fresh room with `create-room "Task Name"`.
-
-### `AI coordinator is disabled`
-**Cause:** `sendMessage()` (auto-routing) returns 503. Only direct `@agent` commands work.
-**Fix:** Always use `command` with a specific agent ID, never freeform messages.
-
-### `Timeout waiting for response`
-**Cause:** Agent didn't respond in time. Possible dangling WebSocket on Teneo's side.
-**Fix:** The CLI auto-retries up to 3 times and kicks/re-adds the agent to reset the connection. If it still fails, try a different agent.
-
-### `Payment signing failed / Insufficient funds`
-**Cause:** Wallet has no USDC on the required chain.
-**Fix:** Check balance with `check-balance`. The CLI auto-retries on other funded chains. If all chains are empty, fund the wallet.
-
-### `Direct-agent mismatch`
-**Cause:** You sent a command to a specific agent but the coordinator routed it to a different one.
-**Fix:** This is a safety guard — the CLI rejects the response to prevent paying the wrong agent. Retry the command.
-
-### `OOM on small instances`
-**Cause:** `npm install` gets killed on low-memory VMs.
-**Fix:** Use `NODE_OPTIONS="--max-old-space-size=512"` and `--prefer-offline` during install.
-
-### Agent IDs with spaces fail
-**Cause:** The SDK only allows `[a-zA-Z0-9_-]` in agent IDs.
-**Fix:** Always use the internal agent ID (e.g. `x-agent-enterprise-v2`), never the display name (e.g. "X Platform Agent").
-
----
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `TENEO_PRIVATE_KEY` | No | _(auto-generated)_ | 64 hex chars, no 0x prefix. Auto-generated on first use if not set. |
-| `TENEO_WS_URL` | No | `wss://backend.developer.chatroom.teneo-protocol.ai/ws` | Override the WebSocket endpoint. |
-| `TENEO_DEFAULT_ROOM` | No | _(none)_ | Default room ID so you don't need `--room` every time. |
-| `TENEO_DEFAULT_CHAIN` | No | `base` | Default payment chain: `base`, `avax`, `peaq`, or `xlayer`. |
-
-The `.env` file in `~/teneo-skill/` is auto-loaded.
-
----
-
-## Daemon Architecture
-
-The CLI uses a **background daemon** process that maintains a persistent WebSocket connection to the Teneo Protocol backend. This means:
-
-- **First command** auto-starts the daemon (takes 2-3s to connect)
-- **Subsequent commands** execute instantly via the daemon's local HTTP API
-- **Daemon auto-stops** after 10 minutes of inactivity
-- **Manage the daemon** with `daemon start | stop | status`
-- **Check connection** with `health`
-
-You don't need to manage the daemon manually — it starts and stops automatically. The daemon stores its PID and port in `~/.teneo-wallet/`.
-
----
-
-## Deploy & Manage Your Own Agent
-
-The CLI includes a full `agent` command group for deploying and managing your own agents on the Teneo network. All `agent` subcommands are documented in the auto-generated Command Reference above.
-
-**Quick start:**
-```bash
-~/teneo-skill/teneo agent init "My Agent" --type command \
-  --description "What the agent does" --short-description "One-liner" --category "AI"
-~/teneo-skill/teneo agent deploy ./my-agent    # build, mint NFT, start service
-~/teneo-skill/teneo agent publish my-agent     # make public (optional, free)
-```
-
-You can also build and launch your own agent directly via the Go SDK instead of the CLI scaffolder. Use the `teneo-cli` skill's `agent` workflow for scaffolding and deployment, and the [Teneo Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk) for deeper SDK-level integration.
-
-**Key capabilities:**
-- `agent init <name>` — project scaffolding (metadata + Go code, latest SDK auto-fetched)
-- `agent deploy` — build, mint gasless NFT, start as background service (all automatic)
-- `agent publish` / `agent unpublish` — manage public visibility
-- `agent status` — combined network + local service status
-- `agent logs` — tail agent logs
-- `agent services` — list all running agents
-- Multiple agents can run simultaneously — each gets its own service
-
-For the full agent deployment guide (implementing ProcessTask, streaming, metadata schema, common errors), use the Go SDK docs and the CLI `agent` command help.
-
-## OpenClaw Notes
-
-If you are running inside **OpenClaw**, pay extra attention to CLI output handling:
-
-1. **Shell commands may stream output.** You MUST wait for the process to **fully exit** before reading or parsing stdout. Do not start generating a response while the command is still running.
-2. **If output looks truncated or JSON is invalid**, the command is still running. Wait for the exit code.
-3. **Always confirm the command has returned an exit code** before interpreting results. A successful command returns exit code 0.
-4. **Set shell execution timeout to at least 120 seconds.** Teneo agent queries take 10-30 seconds; discovery commands return large JSON payloads.
-5. **Do not run Teneo commands in the background or in parallel.** Each command uses a WebSocket — run them sequentially and wait for each to complete.
-
----
-
-## Links
-
-- **This CLI (source):** https://github.com/TeneoProtocolAI/teneo-skills
-- **Teneo Protocol:** https://teneo-protocol.ai
-- **Agent Console:** https://agent-console.ai
-- **Payment chains:** Base (8453), Peaq (3338), Avalanche (43114), X Layer (196)
-- **x402 Protocol:** https://x402.org
-
----
+## Available Agents
 
 <!-- AGENTS_LIST -->
 
