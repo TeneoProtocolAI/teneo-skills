@@ -562,9 +562,9 @@ var VALID_PRICE_TYPES = ["task-transaction"];
 var VALID_TASK_UNITS = ["per-query", "per-item"];
 var VALID_PARAM_TYPES = ["string", "number", "username", "boolean", "url", "id", "interval", "datetime", "enum"];
 function validateAgentId(agentId) {
-  if (!agentId) return "agentId is required";
+  if (!agentId) return "agent_id is required (canonical field; legacy agentId is deprecated)";
   if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(agentId) && !/^[a-z0-9]$/.test(agentId))
-    return "agentId must use lowercase letters, numbers, hyphens only, and start/end with a letter or number";
+    return "agent_id must use lowercase letters, numbers, hyphens only, and start/end with a letter or number";
   return null;
 }
 function validateMetadata(meta) {

@@ -57,6 +57,12 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 # Youtube — The command lets you search for videos. Examples: /search ca
 ~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+
+# Predexon Prediction Market Agent 1.5 — Execute any Predexon V2 API request and pay per query via x4
+~/teneo-skill/teneo command "predexon-prediction-market-agent-v5" "proxy <path>" --room <roomId>
+
+# Predexon Prediction Market Trading 1.5 — Create a new user account
+~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "create-user" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 

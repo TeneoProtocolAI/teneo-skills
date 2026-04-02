@@ -20,7 +20,9 @@
     "./skills/agents/teneo-agent-vc-attention",
     "./skills/agents/teneo-agent-x-platform-agent",
     "./skills/agents/teneo-agent-youtube",
-    "./skills/agents/teneo-agent-aave-v3-liquidation-watcher"
+    "./skills/agents/teneo-agent-aave-v3-liquidation-watcher",
+    "./skills/agents/teneo-agent-predexon-prediction-market-agent-1-5",
+    "./skills/agents/teneo-agent-predexon-prediction-market-trading-1-5"
   ],
   "keywords": [
     "skills",

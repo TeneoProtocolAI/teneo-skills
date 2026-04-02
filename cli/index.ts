@@ -661,16 +661,16 @@ interface MetadataValidationError {
 }
 
 function validateAgentId(agentId: string): string | null {
-  if (!agentId) return "agentId is required";
+  if (!agentId) return "agent_id is required (canonical field; legacy agentId is deprecated)";
   if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(agentId) && !/^[a-z0-9]$/.test(agentId))
-    return "agentId must use lowercase letters, numbers, hyphens only, and start/end with a letter or number";
+    return "agent_id must use lowercase letters, numbers, hyphens only, and start/end with a letter or number";
   return null;
 }
 
 function validateMetadata(meta: any): MetadataValidationError[] {
   const errors: MetadataValidationError[] = [];
   if (!meta.name) errors.push({ field: "name", message: "name is required" });
-  // Accept both snake_case (SDK) and camelCase (legacy docs)
+  // Canonical format is snake_case, but accept legacy camelCase for backward compatibility.
   const agentId = meta.agent_id || meta.agentId;
   if (!agentId) errors.push({ field: "agent_id", message: "agent_id is required" });
   else {
