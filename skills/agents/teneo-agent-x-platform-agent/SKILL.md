@@ -1,6 +1,6 @@
 ---
 name: x-platform-agent-teneo
-version: 2.0.50
+version: 2.0.51
 description: "The X Agent mpowers businesses, researchers, and marketers to move beyond surface-level monitoring to gain a comprehensive understanding of brand. Use this skill when the user needs X Platform Agent via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

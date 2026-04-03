@@ -398,7 +398,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.50").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.51").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
   program.addHelpText("afterAll", `
 ${GREETING_INSTALL_TEXT}
@@ -820,7 +820,7 @@ Management:
   status <agentId>         Show agent status (network + local service)
   logs <agentId>           Tail agent logs
   list                     List all your agents
-  services                 List locally running agent services
+  services [--paths]       List locally installed agent services
   undeploy <agentId>       Stop and remove background service
   unpublish <agentId>      Remove from public listing
 
@@ -1208,19 +1208,24 @@ Example:
         agent_id: agentId,
         name,
         directory: result.dir,
+        agent_file: metaFile,
         files: result.files,
         key_mode: result.keyMode,
         next_steps: [
-          `Edit ${metaFile} to define your commands, capabilities, and pricing`,
+          `Edit ${metaFile} now to define commands, capabilities, pricing, and descriptions`,
           `Edit ${result.dir}/main.go to implement your agent logic in ProcessTask`,
-          `teneo agent deploy ./${result.dir}`,
-          `teneo agent publish ${agentId}`
+          `Deploy it locally and mint its NFT: teneo agent deploy ./${result.dir}`,
+          `Make it public after deploy: teneo agent publish ${agentId}`,
+          `Check status anytime: teneo agent status ${agentId}`
         ]
       });
     } else {
       console.log(`
 Created agent: ${agentId}
 `);
+      console.log(`  Agent file:   ${metaFile}`);
+      console.log(`  Edit it now:  define commands, capabilities, pricing, and descriptions`);
+      console.log(``);
       console.log(`  Files:`);
       console.log(`    ${metaFile}   <- commands, pricing, description`);
       console.log(`    ${result.dir}/main.go${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/main.go`.length))}   <- your agent logic (ProcessTask)`);
@@ -1236,8 +1241,11 @@ Created agent: ${agentId}
       console.log(`     - Implement your logic in the ProcessTask function`);
       console.log(`     - The switch/case maps command triggers to your code`);
       console.log(``);
-      console.log(`  3. When ready, deploy:`);
+      console.log(`  3. Deploy it locally and mint its NFT:`);
       console.log(`     teneo agent deploy ./${result.dir}`);
+      console.log(``);
+      console.log(`  4. Make it public after deploy succeeds:`);
+      console.log(`     teneo agent publish ${agentId}`);
       console.log(``);
       console.log(`  Everything is free. Minting costs nothing. No gas fees.`);
       console.log(``);
@@ -1251,15 +1259,21 @@ Created agent: ${agentId}
         file: filename,
         agent_id: agentId,
         name,
+        agent_file: filename,
         next_steps: [
-          `Edit ${filename} to add commands, capabilities, pricing, description, and short_description`,
-          `Run teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}" to scaffold the Go project later`
+          `Edit ${filename} now to add commands, capabilities, pricing, description, and short_description`,
+          `Scaffold the Go project when ready: teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`,
+          `After scaffolding, deploy it locally: teneo agent deploy ./${agentId}`,
+          `After deploy, make it public: teneo agent publish ${agentId}`
         ]
       });
     } else {
       console.log(`
 Created agent metadata: ${filename}
 `);
+      console.log(`  Agent file:   ${filename}`);
+      console.log(`  Edit it now:  define commands, capabilities, pricing, and descriptions`);
+      console.log(``);
       console.log(`  What to do now:`);
       console.log(`  1. Edit ${filename}`);
       console.log(`     - Add your commands to the "commands" array (trigger, description, price)`);
@@ -1268,6 +1282,12 @@ Created agent metadata: ${filename}
       console.log(``);
       console.log(`  2. When ready to scaffold the Go project:`);
       console.log(`     teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`);
+      console.log(``);
+      console.log(`  3. After scaffolding, deploy it locally:`);
+      console.log(`     teneo agent deploy ./${agentId}`);
+      console.log(``);
+      console.log(`  4. After deploy, make it public:`);
+      console.log(`     teneo agent publish ${agentId}`);
       console.log(``);
     }
   }
@@ -1575,6 +1595,10 @@ function getLocalServiceWorkDir(agentId) {
   }
   return null;
 }
+function getKnownAgentWorkDirs(agentId) {
+  const dirs = [getLocalServiceWorkDir(agentId), loadTokenRegistry()[agentId]?.work_dir].filter(Boolean);
+  return [...new Set(dirs)];
+}
 function loadPrivateKeyFromEnvFile(workDir) {
   try {
     const envPath = nodePath.join(workDir, ".env");
@@ -1589,9 +1613,7 @@ function loadPrivateKeyFromEnvFile(workDir) {
 }
 function resolveAgentSigningKey(agentId) {
   if (PRIVATE_KEY) return { key: PRIVATE_KEY, source: "TENEO_PRIVATE_KEY" };
-  const registryWorkDir = loadTokenRegistry()[agentId]?.work_dir;
-  const workDirs = [getLocalServiceWorkDir(agentId), registryWorkDir].filter(Boolean);
-  for (const workDir of workDirs) {
+  for (const workDir of getKnownAgentWorkDirs(agentId)) {
     const key = loadPrivateKeyFromEnvFile(workDir);
     if (key) return { key, source: `${workDir}/.env` };
   }
@@ -1792,10 +1814,11 @@ async function undeployAgent(agentId) {
 agentCmd.command("undeploy").description("Stop and remove background service").argument("<agentId>", "Agent ID").action(async (agentId) => {
   await undeployAgent(agentId);
 });
-agentCmd.command("services").description("List all locally installed agent services").action(async (opts) => {
+agentCmd.command("services").description("List all locally installed agent services").option("--paths", "Show installed agent working directories").action(async (opts) => {
   const { execSync } = await import("node:child_process");
   const platform2 = nodeOs.platform();
   const agents = [];
+  const showPaths = !!opts.paths;
   if (platform2 === "darwin") {
     const launchDir = nodePath.join(nodeOs.homedir(), "Library", "LaunchAgents");
     if (nodeFs.existsSync(launchDir)) {
@@ -1814,7 +1837,13 @@ agentCmd.command("services").description("List all locally installed agent servi
           }
         } catch {
         }
-        agents.push({ agentId, status, pid, plist: nodePath.join(launchDir, plist) });
+        agents.push({
+          agentId,
+          status,
+          pid,
+          plist: nodePath.join(launchDir, plist),
+          work_dir: getKnownAgentWorkDirs(agentId)[0] || null
+        });
       }
     }
   } else if (platform2 === "linux") {
@@ -1834,7 +1863,13 @@ agentCmd.command("services").description("List all locally installed agent servi
           }
         } catch {
         }
-        agents.push({ agentId, status, pid, unit: nodePath.join(unitDir, unit) });
+        agents.push({
+          agentId,
+          status,
+          pid,
+          unit: nodePath.join(unitDir, unit),
+          work_dir: getKnownAgentWorkDirs(agentId)[0] || null
+        });
       }
     }
   } else {
@@ -1854,6 +1889,13 @@ agentCmd.command("services").description("List all locally installed agent servi
   console.log("-".repeat(col.id + col.status + col.pid));
   for (const a of agents) {
     console.log(pad(a.agentId, col.id) + pad(a.status.toUpperCase(), col.status) + pad(a.pid ? String(a.pid) : "-", col.pid));
+  }
+  if (showPaths) {
+    console.log(``);
+    console.log(`Install paths:`);
+    for (const a of agents) {
+      console.log(`  ${a.agentId}: ${a.work_dir || "(unknown)"}`);
+    }
   }
   console.log(`
 ${agents.length} service(s) installed.`);

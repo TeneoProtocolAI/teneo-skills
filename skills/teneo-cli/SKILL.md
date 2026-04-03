@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.50
+version: 2.0.51
 description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection. Use this skill whenever the user needs real-time Teneo data, Teneo agent payments, or Teneo agent deployment."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -15,8 +15,9 @@ This CLI is the supported way to query live Teneo agents, handle x402 USDC payme
 
 ### What You Can Do
 
-- Query live agents for crypto, social, analytics, news, e-commerce, and more.
-- Inspect commands and pricing before running paid requests.
+- Gather live agent data for crypto, social, analytics, news, e-commerce, and more.
+- Inspect agents, commands, and pricing before execution.
+- Invite agents into rooms, send them commands, let the CLI handle payment, and receive the data back in one workflow.
 - Deploy, publish, and manage your own agents from the same CLI.
 
 ### Wallet And Funding
@@ -24,8 +25,10 @@ This CLI is the supported way to query live Teneo agents, handle x402 USDC payme
 - Fastest setup: use the auto-generated CLI wallet created on first use.
 - Existing wallet: set `TENEO_PRIVATE_KEY` to a dedicated EVM wallet private key.
 - Best practice: use a dedicated agent/payment wallet instead of a primary personal wallet.
-- Paid queries can start with a very small USDC balance.
-- x402 payments are gas-free, but on-chain actions may still require native gas on the target chain.
+- Some commands are free. Some commands need USDC in the active wallet before the CLI can pay the network fee.
+- If a command may cost something, inspect `info` or run `quote`, then tell the user to top up that exact wallet before execution.
+- x402 payments are gas-free for query fees, but swaps, bridges, and other on-chain actions still require native gas on the source chain.
+- Example: swapping Base USDC to Ethereum USDC still needs Base ETH.
 
 ### Supported Networks
 
@@ -38,19 +41,21 @@ This CLI is the supported way to query live Teneo agents, handle x402 USDC payme
 ## Quick Mental Model
 
 - Teneo gives the user access to live network agents through the CLI.
-- Most data requests are information queries paid in USDC via x402.
-- Some agents can trigger on-chain actions and move real funds.
+- The CLI can discover agents, add them to rooms, send them commands, handle payment, and return the resulting data.
+- Always gather agent information first before executing unfamiliar or paid commands.
+- Some commands are free, some require USDC in the active wallet, and fund-moving actions can also require native gas.
 - Use the CLI as the source of truth for agent IDs, commands, arguments, pricing, and status.
 
 ## First-Run Onboarding
 
 When wallet context is first established, keep the user update short and practical:
 
-1. Tell them Teneo is ready and what categories of tasks you can handle.
+1. Tell them Teneo is ready and that the CLI can inspect agents, invite them, send commands, handle payment, and return the data.
 2. Share the active wallet address only after `wallet-address --json` returns it.
-3. Tell them to fund that exact wallet with a small amount of USDC on a supported chain before paid commands.
-4. Mention that x402 payments are gas-free, but swaps, bridges, and other on-chain actions may still need native gas.
-5. If they do not know where to start, suggest checking available agents or searching by task.
+3. Tell them some commands are free and some need prior USDC in that exact wallet before execution.
+4. If the selected command may cost something, inspect `info` or run `quote`, then tell them to top up that exact wallet before execution.
+5. Mention that x402 query payments are gas-free, but swaps, bridges, and other on-chain actions still need native gas on the source chain.
+6. If they do not know where to start, suggest checking available agents or searching by task.
 
 ## Use This Skill When
 
@@ -66,12 +71,13 @@ When wallet context is first established, keep the user update short and practic
 3. Run Teneo commands one at a time. Do not run them in parallel.
 4. Wait for process exit before parsing stdout.
 5. Prefer `--json` on commands you need to parse or depend on for machine-readable errors.
-6. Do not invent agent IDs, command syntax, room IDs, or paths. Discover them from the CLI.
-7. Do not claim a deploy worked from partial output. Confirm with `agent status`, `agent logs`, and `agent services`.
-8. The current CLI does not expose the old manual transaction approval workflow. Do not mention or use it.
-9. This repo no longer ships a separate deployment skill. Use the `agent` workflow in this skill.
-10. For swaps, bridges, trades, sends, or any action that can move user funds, confirm intent explicitly before execution.
-11. Treat `wallet-export-key` as dangerous. Only run it on explicit user request.
+6. Gather agent information before execution. Use `list-agents`, `info`, and `quote` instead of guessing.
+7. Do not invent agent IDs, command syntax, room IDs, or paths. Discover them from the CLI.
+8. Do not claim a deploy worked from partial output. Confirm with `agent status`, `agent logs`, and `agent services`.
+9. The current CLI does not expose the old manual transaction approval workflow. Do not mention or use it.
+10. This repo no longer ships a separate deployment skill. Use the `agent` workflow in this skill.
+11. For swaps, bridges, trades, sends, or any action that can move user funds, confirm intent explicitly before execution.
+12. Treat `wallet-export-key` as dangerous. Only run it on explicit user request.
 
 ## Install And Verify
 
@@ -124,6 +130,25 @@ Guidance:
 - Only the `command` subcommand has a CLI `--timeout` flag. Use shell timeouts for other long-running commands.
 - Use at least a 120 second shell timeout for `discover`, `list-agents`, `info`, `command`, `quote`, and agent deployment operations.
 
+## Gathering Data And Running Workflows
+
+Use this order for normal data requests and agent workflows:
+
+1. Verify install and health.
+2. Find the right agent with `list-agents --search`.
+3. Gather the agent details with `info <agentId> --json`.
+4. If the command is paid or pricing is unclear, run `quote` before execution.
+5. If the command costs something, tell the user to top up the active wallet before execution when needed.
+6. Run the exact command with `command` only after syntax, pricing, and wallet context are clear.
+
+Operational rules:
+
+- Gather agent info first. Do not jump straight to `command`.
+- The CLI can invite agents to rooms, send them commands, pay them automatically, and receive the resulting data.
+- Some commands are free. Some commands require prior USDC in the active wallet so the CLI can pay the network fee.
+- Swaps, bridges, and other fund-moving actions may also require native gas on the source chain.
+- Example: Base USDC to Ethereum USDC still needs Base ETH on Base.
+
 ## Default Query Workflow
 
 Use this exact sequence unless the user explicitly asks for something else.
@@ -131,8 +156,9 @@ Use this exact sequence unless the user explicitly asks for something else.
 1. Verify install and health.
 2. Find the agent with `list-agents --search`.
 3. Inspect the chosen agent with `info`.
-4. Run the exact command with `command`.
-5. Use `quote` only when the user wants a price check before execution.
+4. If the command is paid or pricing is unclear, run `quote`.
+5. Tell the user to top up the active wallet before execution when the command needs USDC and funds are missing.
+6. Run the exact command with `command`.
 
 Typical flow:
 
@@ -147,6 +173,7 @@ Notes:
 - `command` auto-resolves a room if `--room` is omitted.
 - `command` auto-adds the target agent when needed.
 - `command` handles payment automatically.
+- `quote` can tell you whether a request is free or paid before execution.
 - Use `--chain` or `--network` only when the user wants a specific payment chain.
 - Do not guess command syntax. Always inspect `info <agentId>` first.
 
@@ -159,6 +186,7 @@ Optional price check:
 ## Discovery Rules
 
 - Prefer `list-agents --search "<keyword>" --json` for targeted lookup.
+- Gather `info <agentId> --json` before every unfamiliar, paid, or fund-moving workflow.
 - Use `info <agentId> --json` before executing any unfamiliar agent command.
 - Use `discover --json` only when you genuinely need the full manifest.
 - Use internal agent IDs, never display names.
@@ -193,9 +221,12 @@ The CLI auto-generates a wallet on first use unless `TENEO_PRIVATE_KEY` is set.
 
 Practical guidance:
 
+- There are free commands and paid commands on the network.
 - Paid queries can start with a very small USDC balance, so tell the user a small amount is enough to begin.
+- If `info` or `quote` shows a paid command, tell the user to top up the exact active wallet before execution when required.
 - x402 payments are gas-free on supported payment chains.
-- On-chain actions such as swaps, bridges, and sends may still require native gas on the relevant chain.
+- On-chain actions such as swaps, bridges, and sends still require native gas on the relevant source chain.
+- Example: Base USDC to Ethereum USDC still needs Base ETH on Base.
 
 Wallet disclosure rules:
 
@@ -232,9 +263,10 @@ Recommended wallet check flow:
 Before paid or fund-moving commands:
 
 1. Establish wallet context and share the active wallet address.
-2. If there is any doubt that funds exist, run `check-balance --json`.
-3. If balances are empty, stop and ask the user to fund that exact wallet.
-4. Confirm intent before swaps, bridges, trades, sends, or any command that can move funds.
+2. Use `info` or `quote` when the cost is unclear.
+3. If there is any doubt that funds exist, run `check-balance --json`.
+4. If balances are empty, stop and ask the user to fund that exact wallet.
+5. Confirm intent before swaps, bridges, trades, sends, or any command that can move funds.
 
 If payment fails:
 
@@ -245,6 +277,14 @@ If payment fails:
 ## Agent Deployment
 
 Use a deterministic, non-interactive flow. Do not let the LLM improvise an interactive conversation around `agent create`.
+
+Deployment order:
+
+1. Initialize the scaffold with `agent create`.
+2. Edit the generated code and metadata at the exact path reported by the CLI.
+3. Validate the metadata.
+4. Deploy the agent, which installs it as a local service.
+5. Publish it when you want to make it public.
 
 ### One-Shot Init
 
@@ -266,11 +306,13 @@ Rules:
 - Always pass `--id`, `--description`, `--short-description`, and `--category`.
 - Prefer running init from `~/teneo-skill` so the project path is `~/teneo-skill/<agent-id>`.
 - If init runs elsewhere, use the exact created path from the command output. Never guess the directory later.
+- `agent create` is the scaffold step. The CLI tells you exactly where the code and metadata were created.
+- After init, put your code into that generated scaffold instead of creating a separate project structure by hand.
 - By default, `agent create` reuses the active CLI wallet so the same CLI can immediately see and try the private deployment.
 - Use `--new-key` only when you intentionally want a separate owner wallet for that agent.
 - Before `agent deploy` or `agent publish`, establish wallet context and share the active wallet address with the user using the wallet disclosure rules above.
 
-### Validate, Deploy, Verify, Publish
+### Code, Validate, Deploy, Publish
 
 ```bash
 ~/teneo-skill/teneo agent validate ~/teneo-skill/my-agent/my-agent-metadata.json --json
@@ -283,10 +325,14 @@ Rules:
 
 Rules:
 
-- `agent deploy` builds the Go binary, mints the NFT identity, and installs the service.
+- Use the exact scaffold path printed by `agent create` when editing code, metadata, and `.env`.
+- The CLI-generated scaffold is where the implementation belongs. Do not guess another location.
+- `agent deploy` builds the Go binary, mints the NFT identity for free, and installs the service.
+- Treat `agent deploy` as the install step for the local service.
+- Do not present minting itself as a paid step.
 - Only say the agent is deployed after checking `agent status` and `agent services`.
 - If status is `stopped` or `offline`, do not claim success. Read logs first.
-- Publish only after deploy has succeeded and the service is healthy.
+- Publish only after deploy has succeeded and the service is healthy. `agent publish` is the step that makes the agent public.
 - If deployment or publish requires funding, remind the user to fund the exact active wallet address on the required chain.
 
 ### When Deploy Fails
@@ -359,8 +405,6 @@ The CLI auto-loads `~/teneo-skill/.env`.
 ## Command Reference
 
 <!-- COMMAND_REFERENCE -->
-## Command Reference
-
 39 commands across agent discovery, execution, room management, deployment, and wallet operations. All commands return JSON to stdout.
 
 ```
@@ -782,8 +826,12 @@ Stop and remove background service
 List all locally installed agent services
 
 ```bash
-~/teneo-skill/teneo agent services
+~/teneo-skill/teneo agent services [--paths]
 ```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--paths` | Show installed agent working directories | - |
 
 ### Wallet Management
 
@@ -930,6 +978,9 @@ Show installed and latest available version
 # Google Search Agent — Performs a Google search for the given query.
 ~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
 
+# LayerZero — Bridge tokens across chains. Fetches a quote from LayerZero,
+~/teneo-skill/teneo command "layerzero" "bridge <amount> <token> <fromChain> <toChain>" --room <roomId>
+
 # LinkedIn — Enrich a LinkedIn profile URL with information like name, he
 ~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
@@ -953,9 +1004,6 @@ Show installed and latest available version
 
 # X Platform Agent — Get the text content and basic information for any post. Sho
 ~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
-
-# Youtube — The command lets you search for videos. Examples: /search ca
-~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -975,6 +1023,7 @@ Show installed and latest available version
 | [CoinMarketCap Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-coinmarketcap-agent/SKILL.md) | 5 | ##### CoinMarketCap Agent  The CoinMarketCap Agent provides comprehensive access... |
 | [CryptoQuant Pro 2.10](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-cryptoquant-pro-2-10/SKILL.md) | 12 | CryptoQuant Pro 2.10  Professional-grade market intelligence including derivativ... |
 | [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
+| [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 1 | Cross-chain token bridge agent powered by LayerZero's Value Transfer API. Suppor... |
 | [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
 | [Messari BTC & ETH Tracker](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-messari-btc-eth-tracker/SKILL.md) | 1 | ## Overview The Messari Tracker Agent serves as a direct bridge to Messari’s ins... |
 | [Predexon Prediction Market Agent 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-agent-1-5/SKILL.md) | 1 | # Predexon Agent — README  Unified prediction market data API for Polymarket, Ka... |
@@ -983,8 +1032,7 @@ Show installed and latest available version
 | [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 6 | AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, ... |
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
-| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
-| [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 0 | - |
+| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 0 | - |
 | [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

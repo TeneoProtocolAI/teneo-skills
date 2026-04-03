@@ -1,6 +1,6 @@
 {
   "name": "teneo-skills",
-  "version": "2.0.50",
+  "version": "2.0.51",
   "skills": [
     "./skills/teneo-cli",
     "./skills/agents",
@@ -12,6 +12,7 @@
     "./skills/agents/teneo-agent-coinmarketcap-agent",
     "./skills/agents/teneo-agent-cryptoquant-pro-2-10",
     "./skills/agents/teneo-agent-google-search-agent",
+    "./skills/agents/teneo-agent-layerzero",
     "./skills/agents/teneo-agent-linkedin",
     "./skills/agents/teneo-agent-messari-btc-eth-tracker",
     "./skills/agents/teneo-agent-predexon-prediction-market-agent-1-5",
@@ -21,7 +22,6 @@
     "./skills/agents/teneo-agent-vc-attention",
     "./skills/agents/teneo-agent-x-platform-agent",
     "./skills/agents/teneo-agent-youtube",
-    "./skills/agents/teneo-agent-layerzero",
     "./skills/agents/teneo-agent-aave-v3-liquidation-watcher"
   ],
   "keywords": [
