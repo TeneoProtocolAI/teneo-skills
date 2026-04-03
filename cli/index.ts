@@ -7,7 +7,7 @@
  *
  * Architecture: CLI commands route through a background daemon process that maintains
  * a persistent WebSocket connection to Teneo Protocol. The daemon auto-starts on first
- * use and auto-stops after 10 minutes of inactivity.
+ * use and auto-stops after a configurable inactivity timeout.
  */
 
 import "dotenv/config";
@@ -355,6 +355,7 @@ function isDaemonRunning(): boolean {
 interface DaemonHealth {
   status?: string;
   authenticated?: boolean;
+  idle_timeout_ms?: number;
   last_connection_error?: string | null;
   last_connection_error_name?: string | null;
 }
@@ -496,7 +497,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.52")
+program.name("teneo-cli").version("2.0.53")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -535,6 +536,7 @@ program.command("daemon")
           port,
           authenticated: health?.authenticated ?? false,
           daemon_status: health?.status ?? null,
+          idle_timeout_ms: health?.idle_timeout_ms ?? null,
           last_connection_error: health?.last_connection_error ?? null,
         });
         break;

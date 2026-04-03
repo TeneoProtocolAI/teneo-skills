@@ -1,6 +1,6 @@
 ---
 name: coinmarketcap-agent-teneo
-version: 2.0.52
+version: 2.0.53
 description: "CoinMarketCap Agent The CoinMarketCap Agent provides comprehensive access to real-time and historical cryptocurrency market data through CoinMarketCap's. Use this skill when the user needs CoinMarketCap Agent via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

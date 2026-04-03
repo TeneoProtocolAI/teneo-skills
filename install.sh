@@ -10,32 +10,34 @@ set -e
 #
 # What it does:
 #   1. Creates ~/teneo-skill/
-#   2. Copies teneo.ts, daemon.ts, and greetings.install.md from the plugin's cli/ directory
-#   3. Installs npm dependencies
-#   4. Creates a bash wrapper at ~/teneo-skill/teneo
+#   2. Copies prebuilt CLI assets from the plugin's cli/ directory when available
+#   3. Falls back to TypeScript source + npm dependencies only when bundles are missing
+#   4. Creates a wrapper at ~/teneo-skill/teneo with a 1 day daemon idle timeout
+#   5. Starts the daemon immediately
 #
 # After install, run commands with:
+#   ~/teneo-skill/teneo daemon status
 #   ~/teneo-skill/teneo list-agents
 #   ~/teneo-skill/teneo health
 # ──────────────────────────────────────────────────────────────
 
 INSTALL_DIR="$HOME/teneo-skill"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DAEMON_IDLE_TIMEOUT_MS="86400000"
 
 # Locate the cli/ directory — works whether run from root or cli/
-if [ -f "$SCRIPT_DIR/cli/index.ts" ]; then
+if [ -f "$SCRIPT_DIR/cli/greetings.install.md" ]; then
   CLI_DIR="$SCRIPT_DIR/cli"
-elif [ -f "$SCRIPT_DIR/index.ts" ]; then
+elif [ -f "$SCRIPT_DIR/greetings.install.md" ]; then
   CLI_DIR="$SCRIPT_DIR"
 else
-  echo "Error: Cannot find CLI source files (index.ts, daemon.ts)." >&2
+  echo "Error: Cannot find CLI assets." >&2
   echo "Run this script from the plugin directory: sh install.sh" >&2
   exit 1
 fi
 
 # ── Preflight ─────────────────────────────────────────────────
 
-# Check Node.js 18+
 if ! command -v node >/dev/null 2>&1; then
   echo "Error: Node.js is required but not installed." >&2
   echo "Install Node.js 18+ from https://nodejs.org" >&2
@@ -48,9 +50,16 @@ if [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
   exit 1
 fi
 
-# Verify source files
-if [ ! -f "$CLI_DIR/index.ts" ] || [ ! -f "$CLI_DIR/daemon.ts" ] || [ ! -f "$CLI_DIR/greetings.install.md" ]; then
-  echo "Error: index.ts, daemon.ts, or greetings.install.md not found in $CLI_DIR" >&2
+if [ ! -f "$CLI_DIR/greetings.install.md" ]; then
+  echo "Error: greetings.install.md not found in $CLI_DIR" >&2
+  exit 1
+fi
+
+USE_PREBUILT=0
+if [ -f "$CLI_DIR/teneo.mjs" ] && [ -f "$CLI_DIR/daemon.mjs" ]; then
+  USE_PREBUILT=1
+elif [ ! -f "$CLI_DIR/index.ts" ] || [ ! -f "$CLI_DIR/daemon.ts" ]; then
+  echo "Error: No prebuilt CLI bundles or TypeScript source found in $CLI_DIR" >&2
   exit 1
 fi
 
@@ -60,33 +69,47 @@ echo "Installing Teneo CLI to $INSTALL_DIR ..."
 
 mkdir -p "$INSTALL_DIR"
 
-# Copy TypeScript source files
-cp "$CLI_DIR/index.ts" "$INSTALL_DIR/teneo.ts"
-cp "$CLI_DIR/daemon.ts" "$INSTALL_DIR/daemon.ts"
-cp "$CLI_DIR/greetings.install.md" "$INSTALL_DIR/greetings.install.md"
-echo "  Copied teneo.ts, daemon.ts, and greetings.install.md"
+if [ "$USE_PREBUILT" -eq 1 ]; then
+  cp "$CLI_DIR/teneo.mjs" "$INSTALL_DIR/teneo.mjs"
+  cp "$CLI_DIR/daemon.mjs" "$INSTALL_DIR/daemon.mjs"
+  cp "$CLI_DIR/greetings.install.md" "$INSTALL_DIR/greetings.install.md"
+  echo "  Copied prebuilt CLI bundles"
+else
+  cp "$CLI_DIR/index.ts" "$INSTALL_DIR/teneo.ts"
+  cp "$CLI_DIR/daemon.ts" "$INSTALL_DIR/daemon.ts"
+  cp "$CLI_DIR/greetings.install.md" "$INSTALL_DIR/greetings.install.md"
+  echo "  Copied teneo.ts, daemon.ts, and greetings.install.md"
 
-# Initialize npm and install dependencies
-cd "$INSTALL_DIR"
-if [ ! -f package.json ]; then
-  npm init -y > /dev/null 2>&1
+  cd "$INSTALL_DIR"
+  if [ ! -f package.json ]; then
+    npm init -y > /dev/null 2>&1
+  fi
+
+  echo "  Installing npm dependencies (fallback path; this may take a minute)..."
+  NODE_OPTIONS="--max-old-space-size=512" npm install --prefer-offline \
+    @teneo-protocol/sdk@latest \
+    commander@^12.1.0 \
+    dotenv@^16.0.0 \
+    viem@^2.21.0 \
+    tsx@^4.0.0 \
+    > /dev/null 2>&1
+  echo "  Dependencies installed"
 fi
 
-echo "  Installing npm dependencies (this may take a minute)..."
-NODE_OPTIONS="--max-old-space-size=512" npm install --prefer-offline \
-  @teneo-protocol/sdk@latest \
-  commander@^12.1.0 \
-  dotenv@^16.0.0 \
-  viem@^2.21.0 \
-  tsx@^4.0.0 \
-  > /dev/null 2>&1
-echo "  Dependencies installed"
-
-# Create bash wrapper without changing the caller's working directory.
-# This keeps relative paths like `agent deploy .` pointed at the user's agent folder.
-printf '#!/bin/bash\nexec npx tsx "%s/teneo.ts" "$@"\n' "$INSTALL_DIR" > "$INSTALL_DIR/teneo"
+if [ "$USE_PREBUILT" -eq 1 ]; then
+  printf '#!/bin/bash\n: "${TENEO_DAEMON_IDLE_TIMEOUT_MS:=86400000}"\nexport TENEO_DAEMON_IDLE_TIMEOUT_MS\nexec node "%s/teneo.mjs" "$@"\n' "$INSTALL_DIR" > "$INSTALL_DIR/teneo"
+else
+  printf '#!/bin/bash\n: "${TENEO_DAEMON_IDLE_TIMEOUT_MS:=86400000}"\nexport TENEO_DAEMON_IDLE_TIMEOUT_MS\nexec npx tsx "%s/teneo.ts" "$@"\n' "$INSTALL_DIR" > "$INSTALL_DIR/teneo"
+fi
 chmod +x "$INSTALL_DIR/teneo"
 echo "  Created wrapper script"
+
+if "$INSTALL_DIR/teneo" daemon stop >/dev/null 2>&1; then :; fi
+if "$INSTALL_DIR/teneo" daemon start --json >/dev/null 2>&1; then
+  echo "  Daemon started (1 day idle timeout)"
+else
+  echo "  Daemon auto-start skipped; run ~/teneo-skill/teneo daemon start"
+fi
 
 # ── Verify ────────────────────────────────────────────────────
 
@@ -94,14 +117,19 @@ echo ""
 echo "Teneo CLI installed to $INSTALL_DIR"
 echo ""
 echo "Files:"
-echo "  $INSTALL_DIR/teneo.ts    CLI source"
-echo "  $INSTALL_DIR/daemon.ts   Background daemon"
+if [ "$USE_PREBUILT" -eq 1 ]; then
+  echo "  $INSTALL_DIR/teneo.mjs   CLI bundle"
+  echo "  $INSTALL_DIR/daemon.mjs  Background daemon bundle"
+else
+  echo "  $INSTALL_DIR/teneo.ts    CLI source"
+  echo "  $INSTALL_DIR/daemon.ts   Background daemon"
+fi
 echo "  $INSTALL_DIR/teneo       Wrapper (run this)"
 echo ""
 echo "Usage:"
-echo "  ~/teneo-skill/teneo health"
+echo "  ~/teneo-skill/teneo daemon status"
 echo "  ~/teneo-skill/teneo list-agents"
-echo "  ~/teneo-skill/teneo discover"
+echo "  ~/teneo-skill/teneo health"
 echo ""
 if [ -f "$INSTALL_DIR/greetings.install.md" ]; then
   sed \

@@ -1,6 +1,6 @@
 ---
 name: cryptoquant-pro-2-10-teneo
-version: 2.0.52
+version: 2.0.53
 description: "CryptoQuant Pro 2.10 Professional-grade market intelligence including derivatives, exchange flows, and network indicators for BTC and ETH. Use this skill when the user needs CryptoQuant Pro 2.10 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

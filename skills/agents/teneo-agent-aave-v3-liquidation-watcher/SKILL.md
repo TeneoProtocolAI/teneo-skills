@@ -1,6 +1,6 @@
 ---
 name: aave-v3-liquidation-watcher-teneo
-version: 2.0.52
+version: 2.0.53
 description: "AI agent for Aave V3 Liquidation Watcher via Teneo Protocol. Use this skill when the user needs Aave V3 Liquidation Watcher via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

@@ -6,7 +6,7 @@
  * CLI commands talk to this daemon via local HTTP instead of opening
  * a new WebSocket connection for every single command.
  *
- * Auto-starts on first CLI command, auto-stops after 10 min idle.
+ * Auto-starts on first CLI command, auto-stops after a configurable idle timeout.
  */
 
 import "dotenv/config";
@@ -35,7 +35,11 @@ const WS_URL =
 const PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 const DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
 const DAEMON_PORT = parseInt(process.env.TENEO_DAEMON_PORT || "19876");
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const IDLE_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.TENEO_DAEMON_IDLE_TIMEOUT_MS);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_IDLE_TIMEOUT_MS;
+})();
 const TX_FOLLOWUP_TIMEOUT_MS = 60_000; // wait up to 60s for follow-up trigger_wallet_tx after a confirmed TX
 
 // Tracks the in-flight startup connection so /health can wait for it
@@ -1430,6 +1434,7 @@ const server = http.createServer(async (req, res) => {
         status,
         connected,
         authenticated,
+        idle_timeout_ms: IDLE_TIMEOUT_MS,
         uptime: Math.floor((Date.now() - startTime) / 1000),
         pid: process.pid,
         sdk_health: sdkHealth,
@@ -1498,7 +1503,7 @@ function cleanup() {
   if (sdk) try { sdk.disconnect(); } catch {}
 }
 
-// Idle timeout: shut down after 10 min of no activity
+// Idle timeout: shut down after the configured period of no activity
 setInterval(() => {
   if (Date.now() - lastActivity > IDLE_TIMEOUT_MS) {
     log("Idle timeout reached, shutting down");
