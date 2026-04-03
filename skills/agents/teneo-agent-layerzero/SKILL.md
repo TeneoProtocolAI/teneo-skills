@@ -1,6 +1,6 @@
 ---
 name: layerzero-teneo
-version: 2.0.54
+version: 2.0.55
 description: "Cross-chain token bridge agent powered by LayerZero's Value Transfer API. Use this skill when the user needs LayerZero via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

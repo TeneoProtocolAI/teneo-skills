@@ -119800,9 +119800,6 @@ var server = http4.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   try {
     if (req.method === "GET" && req.url === "/health") {
-      if (connectingPromise) {
-        await Promise.race([connectingPromise, sleep(15e3)]);
-      }
       let sdkHealth = null;
       try {
         sdkHealth = sdk ? sdk.getHealth() : null;

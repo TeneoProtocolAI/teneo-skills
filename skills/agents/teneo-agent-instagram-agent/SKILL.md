@@ -1,6 +1,6 @@
 ---
 name: instagram-agent-teneo
-version: 2.0.54
+version: 2.0.55
 description: "The Instagram Agent allows users to extract data from Instagram, including posts, profiles, hashtags and comments, to bypass limitations of manual research. Use this skill when the user needs Instagram Agent via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

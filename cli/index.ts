@@ -287,7 +287,7 @@ function renderMarkdownForConsole(markdown: string): string {
 const GREETING_INSTALL_TEXT = renderMarkdownForConsole(loadGreetingInstallMarkdown());
 const DAEMON_START_TIMEOUT_MS = (() => {
   const parsed = Number(process.env.TENEO_DAEMON_START_TIMEOUT_MS);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 15_000;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 30_000;
 })();
 
 function parseTokenId(value: string | undefined, source = "--token-id"): number | undefined {
@@ -384,7 +384,8 @@ async function stopDaemonBestEffort(port = getDaemonPort()): Promise<void> {
   }
 }
 
-async function startDaemonSafe(): Promise<{ port?: number; error?: string }> {
+async function startDaemonSafe(options: { requireAuthenticated?: boolean } = {}): Promise<{ port?: number; health?: DaemonHealth | null; error?: string }> {
+  const requireAuthenticated = options.requireAuthenticated ?? true;
   console.error(JSON.stringify({ info: "Starting daemon..." }));
 
   // Prefer pre-compiled .mjs (fast), fall back to .ts via tsx
@@ -409,19 +410,26 @@ async function startDaemonSafe(): Promise<{ port?: number; error?: string }> {
 
     if (health.authenticated) {
       console.error(JSON.stringify({ info: `Daemon ready on port ${port}` }));
-      return { port };
+      return { port, health };
+    }
+
+    if (!requireAuthenticated) {
+      console.error(JSON.stringify({ info: `Daemon HTTP server ready on port ${port}` }));
+      return { port, health };
     }
 
     if (health.last_connection_error) {
       lastError = health.last_connection_error;
-      if (health.last_connection_error_name === "WalletConfigurationError") {
+      if (requireAuthenticated && health.last_connection_error_name === "WalletConfigurationError") {
         await stopDaemonBestEffort(port);
         return { error: lastError };
       }
     }
   }
 
-  await stopDaemonBestEffort();
+  if (requireAuthenticated) {
+    await stopDaemonBestEffort();
+  }
   return {
     error: lastError
       ? `Daemon failed to authenticate within ${DAEMON_START_TIMEOUT_MS}ms. ${lastError}`
@@ -433,6 +441,41 @@ async function startDaemon(): Promise<number> {
   const result = await startDaemonSafe();
   if (result.error || !result.port) fail(result.error || "Daemon failed to start.");
   return result.port;
+}
+
+async function getHealthStatus(): Promise<Record<string, unknown>> {
+  let port = getDaemonPort();
+  let running = !!port && isDaemonRunning();
+  let health = running && port ? await fetchDaemonHealth(port) : null;
+
+  if ((!running || !health) && !running) {
+    const started = await startDaemonSafe({ requireAuthenticated: false });
+    if (started.port) {
+      port = started.port;
+      running = true;
+      health = started.health ?? await fetchDaemonHealth(port);
+    } else {
+      return {
+        status: "stopped",
+        port: null,
+        connected: false,
+        authenticated: false,
+        daemon_status: null,
+        idle_timeout_ms: null,
+        last_connection_error: started.error || null,
+      };
+    }
+  }
+
+  return {
+    status: running ? "running" : "stopped",
+    port: port ?? null,
+    connected: health?.status === "ready" || health?.status === "connected",
+    authenticated: health?.authenticated ?? false,
+    daemon_status: health?.status ?? (running ? "starting" : null),
+    idle_timeout_ms: health?.idle_timeout_ms ?? null,
+    last_connection_error: health?.last_connection_error ?? null,
+  };
 }
 
 async function execViaDaemon(command: string, args: Record<string, any> = {}): Promise<any> {
@@ -497,7 +540,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.54")
+program.name("teneo-cli").version("2.0.55")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -552,7 +595,7 @@ program.command("health")
   .description("Check connection health")
   .action(async () => {
     console.error(`teneo-cli v${program.version()}`);
-    out(await execViaDaemon("health"));
+    out(await getHealthStatus());
   });
 
 // ─── Browse & Query Network Agents ──────────────────────────────────────────

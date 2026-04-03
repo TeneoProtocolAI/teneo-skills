@@ -1,6 +1,6 @@
 ---
 name: amazon-teneo
-version: 2.0.54
+version: 2.0.55
 description: "The Amazon Agent is a high-performance tool designed to turn massive e-commerce datasets into structured, usable intelligence. Use this skill when the user needs Amazon via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

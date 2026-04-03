@@ -1413,10 +1413,6 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === "GET" && req.url === "/health") {
-      // Wait for startup connection if still in flight (up to 15s)
-      if (connectingPromise) {
-        await Promise.race([connectingPromise, sleep(15000)]);
-      }
       let sdkHealth = null;
       try { sdkHealth = sdk ? (sdk as any).getHealth() : null; } catch {}
       const authenticated = sdkHealth?.connection?.authenticated || false;
