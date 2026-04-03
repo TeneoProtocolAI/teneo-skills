@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.46
+version: 2.0.47
 description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection. Use this skill whenever the user needs real-time Teneo data, Teneo agent payments, or Teneo agent deployment."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -266,6 +266,8 @@ Rules:
 - Always pass `--id`, `--description`, `--short-description`, and `--category`.
 - Prefer running init from `~/teneo-skill` so the project path is `~/teneo-skill/<agent-id>`.
 - If init runs elsewhere, use the exact created path from the command output. Never guess the directory later.
+- By default, `agent create` reuses the active CLI wallet so the same CLI can immediately see and try the private deployment.
+- Use `--new-key` only when you intentionally want a separate owner wallet for that agent.
 - Before `agent deploy` or `agent publish`, establish wallet context and share the active wallet address with the user using the wallet disclosure rules above.
 
 ### Validate, Deploy, Verify, Publish
@@ -652,7 +654,7 @@ Unsubscribe from room
 Create a new agent project (scaffolds Go code + metadata)
 
 ```bash
-~/teneo-skill/teneo agent create <name> [--id <id>] [--type <type>] [--template <template>] [--description <desc>] [--short-description <desc>] [--category <cat>] [--metadata-only] [--use-cli-key]
+~/teneo-skill/teneo agent create <name> [--id <id>] [--type <type>] [--template <template>] [--description <desc>] [--short-description <desc>] [--category <cat>] [--metadata-only] [--new-key] [--use-cli-key]
 ```
 
 | Argument | Required | Description |
@@ -668,7 +670,8 @@ Create a new agent project (scaffolds Go code + metadata)
 | `--short-description <desc>` | Short description | - |
 | `--category <cat>` | Category (can specify multiple) |  |
 | `--metadata-only` | Only create metadata JSON, skip Go project scaffolding | - |
-| `--use-cli-key` | Reuse the CLI wallet key for the agent | - |
+| `--new-key` | Generate a separate private key for the agent instead of reusing the CLI wallet | - |
+| `--use-cli-key` | Reuse the CLI wallet key for the agent (default) | - |
 
 #### `agent validate`
 

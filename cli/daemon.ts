@@ -60,19 +60,76 @@ const CHAIN_TO_USDC: Record<string, string> = {
   "x-layer": "0x74b7F16337b8972027F6196A17a631aC6dE26d22",
 };
 
+const PAYMENT_CHAIN_DISPLAY_PREFERENCE = ["base", "avax", "xlayer", "peaq"] as const;
+
+function getPaymentChainKey(chainName: string): string | null {
+  const caip2 = CHAIN_TO_CAIP2[chainName];
+  const usdc = CHAIN_TO_USDC[chainName];
+  if (!caip2 || !usdc) return null;
+  return `${caip2}:${usdc.toLowerCase()}`;
+}
+
+function getSupportedPaymentChains(): string[] {
+  const supported = new Map<string, string>();
+
+  const register = (chainName: string) => {
+    const key = getPaymentChainKey(chainName);
+    if (key && !supported.has(key)) supported.set(key, chainName);
+  };
+
+  for (const chainName of PAYMENT_CHAIN_DISPLAY_PREFERENCE) register(chainName);
+  for (const chainName of Object.keys(CHAIN_TO_CAIP2)) register(chainName);
+
+  return [...supported.values()];
+}
+
+const SUPPORTED_PAYMENT_CHAINS = getSupportedPaymentChains();
+
 // Payment network retry priority — try these in order when a payment fails on one chain
-const PAYMENT_NETWORK_PRIORITY = ["base", "avalanche", "xlayer", "peaq"] as const;
+const PAYMENT_NETWORK_PRIORITY = [...SUPPORTED_PAYMENT_CHAINS];
 const BALANCE_CHECK_TIMEOUT_MS = 4_000;
 
 const ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }] as const;
 
 // ─── Payment Utilities ──────────────────────────────────────────────────────
 
+function formatSupportedPaymentChains(): string {
+  return SUPPORTED_PAYMENT_CHAINS.join(", ");
+}
+
+function formatSupportedPaymentChainsForFlag(): string {
+  return SUPPORTED_PAYMENT_CHAINS.join("|");
+}
+
+function normalizePaymentChainName(chainName: string): string {
+  const targetKey = getPaymentChainKey(chainName);
+  if (!targetKey) return chainName;
+
+  for (const supportedChain of SUPPORTED_PAYMENT_CHAINS) {
+    if (getPaymentChainKey(supportedChain) === targetKey) return supportedChain;
+  }
+
+  return chainName;
+}
+
+function buildFundingInstruction(subject: string, chainName?: string): string {
+  if (chainName) {
+    return `Fund ${subject} with USDC on ${chainName} or another supported payment chain: ${formatSupportedPaymentChains()}.`;
+  }
+  return `Fund ${subject} with USDC on one of the supported payment chains: ${formatSupportedPaymentChains()}.`;
+}
+
+function buildPaymentFundingError(address: string, reason: string, chainName?: string): string {
+  const normalizedReason = (reason || "Insufficient funds for Teneo payment").trim().replace(/\.\s*$/, "");
+  return `${normalizedReason}. Active wallet: ${address}. Use this address for funding/ownership checks. ${buildFundingInstruction("this exact wallet", chainName)}`;
+}
+
 async function fetchUsdcBalance(address: string, chainName: string): Promise<{ chain: string; balance: bigint | null; error: string | null }> {
-  const usdcAddr = CHAIN_TO_USDC[chainName];
+  const normalizedChain = normalizePaymentChainName(chainName);
+  const usdcAddr = CHAIN_TO_USDC[normalizedChain];
   if (!usdcAddr) return { chain: chainName, balance: null, error: `Unknown chain: ${chainName}` };
 
-  const caip2 = CHAIN_TO_CAIP2[chainName];
+  const caip2 = CHAIN_TO_CAIP2[normalizedChain];
   if (!caip2) return { chain: chainName, balance: null, error: `No CAIP2 for chain: ${chainName}` };
 
   const chainId = parseInt(caip2.split(":")[1]);
@@ -89,15 +146,16 @@ async function fetchUsdcBalance(address: string, chainName: string): Promise<{ c
       }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), BALANCE_CHECK_TIMEOUT_MS)),
     ]);
-    return { chain: chainName, balance: BigInt(balance), error: null };
+    return { chain: normalizedChain, balance: BigInt(balance), error: null };
   } catch (err: any) {
-    return { chain: chainName, balance: null, error: err.message };
+    return { chain: normalizedChain, balance: null, error: err.message };
   }
 }
 
 async function findFundedNetworks(address: string, exclude: string[] = []): Promise<{ chain: string; balance: bigint }[]> {
+  const excluded = new Set(exclude.map(normalizePaymentChainName));
   const checks = PAYMENT_NETWORK_PRIORITY
-    .filter(c => !exclude.includes(c))
+    .filter(c => !excluded.has(c))
     .map(c => fetchUsdcBalance(address, c));
   const results = await Promise.all(checks);
   return results
@@ -274,7 +332,7 @@ function requireKey(): string {
     createdAt: new Date().toISOString(),
   });
   log(`Wallet created: ${account.address}`);
-  log("Fund this address with USDC on Base, Avalanche, Peaq, or X Layer to use paid agents.");
+  log(buildFundingInstruction("this address"));
   return privateKey;
 }
 
@@ -1168,14 +1226,17 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
     // Helper: build message options for a given network
     const buildMessageOptions = (networkOverride?: string) => {
-      const resolvedNetwork = networkOverride
-        ? (CHAIN_TO_CAIP2[networkOverride] || networkOverride)
+      const resolvedChainName = networkOverride
+        ? normalizePaymentChainName(networkOverride)
         : explicitChain
-          ? (CHAIN_TO_CAIP2[explicitChain] || explicitChain)
+          ? normalizePaymentChainName(explicitChain)
           : preflightChain
-            ? (CHAIN_TO_CAIP2[preflightChain] || preflightChain)
+            ? normalizePaymentChainName(preflightChain)
             : undefined;
-      if (resolvedNetwork && !attemptedNetworks.includes(resolvedNetwork)) attemptedNetworks.push(resolvedNetwork);
+      const resolvedNetwork = resolvedChainName
+        ? (CHAIN_TO_CAIP2[resolvedChainName] || resolvedChainName)
+        : undefined;
+      if (resolvedChainName && !attemptedNetworks.includes(resolvedChainName)) attemptedNetworks.push(resolvedChainName);
       return {
         room,
         waitForResponse: true,
@@ -1195,38 +1256,38 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
         start: () => s.sendMessage(commandText, { ...messageOptions, waitForResponse: false }) as Promise<void>,
       });
     } catch (cmdError: any) {
-      // Payment network retry — if 402 and no explicit chain, try another funded network
+      // Payment handling: retry another funded network when possible, otherwise surface funding guidance
       const is402 = cmdError.message?.includes("402") || cmdError.message?.includes("Payment verification failed") || cmdError.message?.includes("insufficient");
-      if (is402 && !explicitChain) {
+      if (is402) {
         const key = requireKey();
         const account = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`);
-        const funded = await findFundedNetworks(account.address, attemptedNetworks.map(caip2 => {
-          // Reverse lookup: caip2 -> chain name
-          for (const [name, c] of Object.entries(CHAIN_TO_CAIP2)) { if (c === caip2) return name; }
-          return caip2;
-        }));
+        if (!explicitChain) {
+          const funded = await findFundedNetworks(account.address, attemptedNetworks);
 
-        if (funded.length > 0) {
-          const nextChain = funded[0].chain;
-          log(`Payment failed, retrying on ${nextChain} (balance: ${formatMicroUsdc(funded[0].balance)} USDC)`);
-          const retryOptions = buildMessageOptions(nextChain);
+          if (funded.length > 0) {
+            const nextChain = funded[0].chain;
+            log(`Payment failed, retrying on ${nextChain} (balance: ${formatMicroUsdc(funded[0].balance)} USDC)`);
+            const retryOptions = buildMessageOptions(nextChain);
 
-          const retryResponse = await runMultiStepTxFlow(s, {
-            agent,
-            commandLabel: cmd,
-            effectiveTimeout,
-            start: () => s.sendMessage(commandText, { ...retryOptions, waitForResponse: false }) as Promise<void>,
-          });
+            const retryResponse = await runMultiStepTxFlow(s, {
+              agent,
+              commandLabel: cmd,
+              effectiveTimeout,
+              start: () => s.sendMessage(commandText, { ...retryOptions, waitForResponse: false }) as Promise<void>,
+            });
 
-          if (retryResponse && typeof retryResponse === "object") {
-            return {
-              ...retryResponse,
-              _payment_retry: { original_error: cmdError.message, retried_on: nextChain },
-            };
+            if (retryResponse && typeof retryResponse === "object") {
+              return {
+                ...retryResponse,
+                _payment_retry: { original_error: cmdError.message, retried_on: nextChain },
+              };
+            }
+
+            return retryResponse;
           }
-
-          return retryResponse;
         }
+
+        throw new Error(buildPaymentFundingError(account.address, cmdError.message, explicitChain ? normalizePaymentChainName(explicitChain) : undefined));
       }
       throw cmdError;
     }
@@ -1243,7 +1304,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
       const account = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`);
       const funded = await findFundedNetworks(account.address);
       if (funded.length === 0) {
-        throw new Error("No funded networks found for quote. Set --chain or fund your wallet with USDC on a supported chain first.");
+        throw new Error(buildPaymentFundingError(account.address, "No funded payment networks found for quote"));
       }
       preflightChain = funded[0].chain;
       log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
@@ -1256,7 +1317,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
         : undefined;
 
     if (!resolvedChain) {
-      throw new Error("Unable to resolve quote chain. Set --chain to a valid network (base|avax|peaq|xlayer).");
+      throw new Error(`Unable to resolve quote chain. Set --chain to a valid network (${formatSupportedPaymentChainsForFlag()}).`);
     }
     const q = await s.requestQuote(message, room, resolvedChain);
     return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };

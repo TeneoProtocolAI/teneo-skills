@@ -40,13 +40,56 @@ var CHAIN_TO_USDC = {
   xlayer: "0x74b7F16337b8972027F6196A17a631aC6dE26d22",
   "x-layer": "0x74b7F16337b8972027F6196A17a631aC6dE26d22"
 };
-var PAYMENT_NETWORK_PRIORITY = ["base", "avalanche", "xlayer", "peaq"];
+var PAYMENT_CHAIN_DISPLAY_PREFERENCE = ["base", "avax", "xlayer", "peaq"];
+function getPaymentChainKey(chainName) {
+  const caip2 = CHAIN_TO_CAIP2[chainName];
+  const usdc = CHAIN_TO_USDC[chainName];
+  if (!caip2 || !usdc) return null;
+  return `${caip2}:${usdc.toLowerCase()}`;
+}
+function getSupportedPaymentChains() {
+  const supported = /* @__PURE__ */ new Map();
+  const register = (chainName) => {
+    const key = getPaymentChainKey(chainName);
+    if (key && !supported.has(key)) supported.set(key, chainName);
+  };
+  for (const chainName of PAYMENT_CHAIN_DISPLAY_PREFERENCE) register(chainName);
+  for (const chainName of Object.keys(CHAIN_TO_CAIP2)) register(chainName);
+  return [...supported.values()];
+}
+var SUPPORTED_PAYMENT_CHAINS = getSupportedPaymentChains();
+var PAYMENT_NETWORK_PRIORITY = [...SUPPORTED_PAYMENT_CHAINS];
 var BALANCE_CHECK_TIMEOUT_MS = 4e3;
 var ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
+function formatSupportedPaymentChains() {
+  return SUPPORTED_PAYMENT_CHAINS.join(", ");
+}
+function formatSupportedPaymentChainsForFlag() {
+  return SUPPORTED_PAYMENT_CHAINS.join("|");
+}
+function normalizePaymentChainName(chainName) {
+  const targetKey = getPaymentChainKey(chainName);
+  if (!targetKey) return chainName;
+  for (const supportedChain of SUPPORTED_PAYMENT_CHAINS) {
+    if (getPaymentChainKey(supportedChain) === targetKey) return supportedChain;
+  }
+  return chainName;
+}
+function buildFundingInstruction(subject, chainName) {
+  if (chainName) {
+    return `Fund ${subject} with USDC on ${chainName} or another supported payment chain: ${formatSupportedPaymentChains()}.`;
+  }
+  return `Fund ${subject} with USDC on one of the supported payment chains: ${formatSupportedPaymentChains()}.`;
+}
+function buildPaymentFundingError(address, reason, chainName) {
+  const normalizedReason = (reason || "Insufficient funds for Teneo payment").trim().replace(/\.\s*$/, "");
+  return `${normalizedReason}. Active wallet: ${address}. Use this address for funding/ownership checks. ${buildFundingInstruction("this exact wallet", chainName)}`;
+}
 async function fetchUsdcBalance(address, chainName) {
-  const usdcAddr = CHAIN_TO_USDC[chainName];
+  const normalizedChain = normalizePaymentChainName(chainName);
+  const usdcAddr = CHAIN_TO_USDC[normalizedChain];
   if (!usdcAddr) return { chain: chainName, balance: null, error: `Unknown chain: ${chainName}` };
-  const caip2 = CHAIN_TO_CAIP2[chainName];
+  const caip2 = CHAIN_TO_CAIP2[normalizedChain];
   if (!caip2) return { chain: chainName, balance: null, error: `No CAIP2 for chain: ${chainName}` };
   const chainId = parseInt(caip2.split(":")[1]);
   const chain = getChain(chainId);
@@ -61,13 +104,14 @@ async function fetchUsdcBalance(address, chainName) {
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), BALANCE_CHECK_TIMEOUT_MS))
     ]);
-    return { chain: chainName, balance: BigInt(balance), error: null };
+    return { chain: normalizedChain, balance: BigInt(balance), error: null };
   } catch (err) {
-    return { chain: chainName, balance: null, error: err.message };
+    return { chain: normalizedChain, balance: null, error: err.message };
   }
 }
 async function findFundedNetworks(address, exclude = []) {
-  const checks = PAYMENT_NETWORK_PRIORITY.filter((c) => !exclude.includes(c)).map((c) => fetchUsdcBalance(address, c));
+  const excluded = new Set(exclude.map(normalizePaymentChainName));
+  const checks = PAYMENT_NETWORK_PRIORITY.filter((c) => !excluded.has(c)).map((c) => fetchUsdcBalance(address, c));
   const results = await Promise.all(checks);
   return results.filter((r) => r.balance !== null && r.balance > 0n).map((r) => ({ chain: r.chain, balance: r.balance })).sort((a, b) => a.balance > b.balance ? -1 : 1);
 }
@@ -209,7 +253,7 @@ function requireKey() {
     createdAt: (/* @__PURE__ */ new Date()).toISOString()
   });
   log(`Wallet created: ${account.address}`);
-  log("Fund this address with USDC on Base, Avalanche, Peaq, or X Layer to use paid agents.");
+  log(buildFundingInstruction("this address"));
   return privateKey;
 }
 var sdk = null;
@@ -979,8 +1023,9 @@ var handlers = {
       }
     }
     const buildMessageOptions = (networkOverride) => {
-      const resolvedNetwork = networkOverride ? CHAIN_TO_CAIP2[networkOverride] || networkOverride : explicitChain ? CHAIN_TO_CAIP2[explicitChain] || explicitChain : preflightChain ? CHAIN_TO_CAIP2[preflightChain] || preflightChain : void 0;
-      if (resolvedNetwork && !attemptedNetworks.includes(resolvedNetwork)) attemptedNetworks.push(resolvedNetwork);
+      const resolvedChainName = networkOverride ? normalizePaymentChainName(networkOverride) : explicitChain ? normalizePaymentChainName(explicitChain) : preflightChain ? normalizePaymentChainName(preflightChain) : void 0;
+      const resolvedNetwork = resolvedChainName ? CHAIN_TO_CAIP2[resolvedChainName] || resolvedChainName : void 0;
+      if (resolvedChainName && !attemptedNetworks.includes(resolvedChainName)) attemptedNetworks.push(resolvedChainName);
       return {
         room,
         waitForResponse: true,
@@ -999,33 +1044,31 @@ var handlers = {
       });
     } catch (cmdError) {
       const is402 = cmdError.message?.includes("402") || cmdError.message?.includes("Payment verification failed") || cmdError.message?.includes("insufficient");
-      if (is402 && !explicitChain) {
+      if (is402) {
         const key = requireKey();
         const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
-        const funded = await findFundedNetworks(account.address, attemptedNetworks.map((caip2) => {
-          for (const [name, c] of Object.entries(CHAIN_TO_CAIP2)) {
-            if (c === caip2) return name;
+        if (!explicitChain) {
+          const funded = await findFundedNetworks(account.address, attemptedNetworks);
+          if (funded.length > 0) {
+            const nextChain = funded[0].chain;
+            log(`Payment failed, retrying on ${nextChain} (balance: ${formatMicroUsdc(funded[0].balance)} USDC)`);
+            const retryOptions = buildMessageOptions(nextChain);
+            const retryResponse = await runMultiStepTxFlow(s, {
+              agent,
+              commandLabel: cmd,
+              effectiveTimeout,
+              start: () => s.sendMessage(commandText, { ...retryOptions, waitForResponse: false })
+            });
+            if (retryResponse && typeof retryResponse === "object") {
+              return {
+                ...retryResponse,
+                _payment_retry: { original_error: cmdError.message, retried_on: nextChain }
+              };
+            }
+            return retryResponse;
           }
-          return caip2;
-        }));
-        if (funded.length > 0) {
-          const nextChain = funded[0].chain;
-          log(`Payment failed, retrying on ${nextChain} (balance: ${formatMicroUsdc(funded[0].balance)} USDC)`);
-          const retryOptions = buildMessageOptions(nextChain);
-          const retryResponse = await runMultiStepTxFlow(s, {
-            agent,
-            commandLabel: cmd,
-            effectiveTimeout,
-            start: () => s.sendMessage(commandText, { ...retryOptions, waitForResponse: false })
-          });
-          if (retryResponse && typeof retryResponse === "object") {
-            return {
-              ...retryResponse,
-              _payment_retry: { original_error: cmdError.message, retried_on: nextChain }
-            };
-          }
-          return retryResponse;
         }
+        throw new Error(buildPaymentFundingError(account.address, cmdError.message, explicitChain ? normalizePaymentChainName(explicitChain) : void 0));
       }
       throw cmdError;
     }
@@ -1039,14 +1082,14 @@ var handlers = {
       const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
       const funded = await findFundedNetworks(account.address);
       if (funded.length === 0) {
-        throw new Error("No funded networks found for quote. Set --chain or fund your wallet with USDC on a supported chain first.");
+        throw new Error(buildPaymentFundingError(account.address, "No funded payment networks found for quote"));
       }
       preflightChain = funded[0].chain;
       log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
     }
     const resolvedChain = explicitChain ? CHAIN_TO_CAIP2[explicitChain] || explicitChain : preflightChain ? CHAIN_TO_CAIP2[preflightChain] || preflightChain : void 0;
     if (!resolvedChain) {
-      throw new Error("Unable to resolve quote chain. Set --chain to a valid network (base|avax|peaq|xlayer).");
+      throw new Error(`Unable to resolve quote chain. Set --chain to a valid network (${formatSupportedPaymentChainsForFlag()}).`);
     }
     const q = await s.requestQuote(message, room, resolvedChain);
     return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };

@@ -11,7 +11,7 @@
  */
 
 import "dotenv/config";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import {
   createWalletClient,
   createPublicClient,
@@ -176,7 +176,7 @@ function autoCreateWallet(options: { resetSecret?: boolean } = {}): { address: s
     createdAt: new Date().toISOString(),
   });
   console.error(JSON.stringify({ info: `Wallet created: ${account.address}` }));
-  console.error(JSON.stringify({ info: "Fund this address with USDC on Base, Avalanche, Peaq, or X Layer to use paid agents." }));
+  console.error(JSON.stringify({ info: `Fund this address with USDC on one of the supported payment chains: ${formatSupportedWalletChains()}.` }));
   return { address: account.address, privateKey };
 }
 
@@ -227,6 +227,16 @@ const WALLET_CHAIN_MAP: Record<string, Chain> = {
     rpcUrls: { default: { http: ["https://rpc.xlayer.tech"] } },
   }),
 };
+
+const SUPPORTED_WALLET_CHAINS = Object.keys(WALLET_CHAIN_MAP);
+
+function formatSupportedWalletChains(): string {
+  return SUPPORTED_WALLET_CHAINS.join(", ");
+}
+
+function formatSupportedWalletChainsForFlag(): string {
+  return SUPPORTED_WALLET_CHAINS.join("|");
+}
 
 const ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }] as const;
 const ERC20_TRANSFER_ABI = [{ inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }], name: "transfer", outputs: [{ name: "", type: "bool" }], stateMutability: "nonpayable", type: "function" }] as const;
@@ -486,7 +496,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.46")
+program.name("teneo-cli").version("2.0.47")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -643,7 +653,7 @@ program.command("command")
   .argument("<cmd>", "Command string: {trigger} {argument}")
   .option("--room <roomId>")
   .option("--timeout <ms>", "Response timeout", "120000")
-  .option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)")
+  .option("--chain <chain>", `Payment chain (${formatSupportedWalletChainsForFlag()})`)
   .option("--network <network>", "Payment network (alias for --chain)")
   .action(async (agent: string, cmd: string, opts: any) => {
     const room = await resolveRoom(opts.room);
@@ -655,7 +665,7 @@ program.command("quote")
   .description("Check price for a command (does not execute)")
   .argument("<message>")
   .option("--room <roomId>")
-  .option("--chain <chain>", "Payment chain (base|avax|peaq|xlayer)")
+  .option("--chain <chain>", `Payment chain (${formatSupportedWalletChainsForFlag()})`)
   .option("--network <network>", "Payment network (alias for --chain)")
   .action(async (message: string, opts: any) => {
     const room = await resolveRoom(opts.room);
@@ -718,7 +728,7 @@ program.command("wallet-init").description("Show wallet status or create a new w
       if (existing) { out({ status: "exists", address: existing.address, createdAt: existing.createdAt }); return; }
     }
     const { address } = autoCreateWallet({ resetSecret: !!opts.force });
-    out({ status: "created", address, note: "New wallet generated. Fund with USDC to use paid agents." });
+    out({ status: "created", address, note: `New wallet generated. Fund with USDC on one of the supported payment chains: ${formatSupportedWalletChains()}.` });
   });
 
 program.command("wallet-address").description("Show wallet public address")
@@ -761,10 +771,10 @@ program.command("wallet-export-key").description("Export private key (DANGEROUS)
   });
 
 program.command("wallet-balance").description("Check USDC and native token balances on supported chains")
-  .option("--chain <chain>", "Specific chain (base|avax|peaq|xlayer)")
+  .option("--chain <chain>", `Specific chain (${formatSupportedWalletChainsForFlag()})`)
   .action(async (opts: any) => {
     const address = getWalletAddress();
-    const chainsToCheck = opts.chain ? [opts.chain] : ["base", "avax", "peaq", "xlayer"];
+    const chainsToCheck = opts.chain ? [opts.chain] : SUPPORTED_WALLET_CHAINS;
     const results: Record<string, any> = {};
     for (const chainName of chainsToCheck) {
       const chain = WALLET_CHAIN_MAP[chainName];
@@ -792,13 +802,13 @@ program.command("wallet-balance").description("Check USDC and native token balan
   });
 
 program.command("wallet-send").description("Send USDC to any address")
-  .argument("<amount>", "Amount in USDC").argument("<to>", "Destination address").argument("<chain>", "Chain (base|avax|peaq|xlayer)")
+  .argument("<amount>", "Amount in USDC").argument("<to>", "Destination address").argument("<chain>", `Chain (${formatSupportedWalletChainsForFlag()})`)
   .action(async (amountStr: string, to: string, chainName: string) => {
     const rawAmount = parseUsdcAmount(amountStr);
     if (!isAddress(to)) fail("Invalid address. Must be a valid EVM address.");
     const chain = WALLET_CHAIN_MAP[chainName];
     const usdcAddr = USDC_ADDRESSES[chainName];
-    if (!chain || !usdcAddr) fail(`Unknown chain: ${chainName}. Supported: base, avax, peaq, xlayer`);
+    if (!chain || !usdcAddr) fail(`Unknown chain: ${chainName}. Supported: ${formatSupportedWalletChains()}`);
     const key = requireKey();
     const account = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`);
     const wc = createWalletClient({ account, chain, transport: http() });
@@ -1155,7 +1165,10 @@ async function getLatestSDKVersion(): Promise<string> {
   return SDK_FALLBACK_VERSION;
 }
 
-async function scaffoldAgent(meta: any, opts: { type: string; useCliKey: boolean }): Promise<{ dir: string; agentId: string; files: string[] }> {
+async function scaffoldAgent(
+  meta: any,
+  opts: { type: string; useCliKey?: boolean; newKey?: boolean }
+): Promise<{ dir: string; agentId: string; files: string[]; keyMode: "cli_wallet" | "new_key" }> {
   await ensureGo();
 
   const agentId = meta.agent_id || meta.agentId;
@@ -1166,12 +1179,13 @@ async function scaffoldAgent(meta: any, opts: { type: string; useCliKey: boolean
 
   // Generate or reuse key
   let agentKey: string;
-  if (opts.useCliKey) {
+  const useCliKey = opts.useCliKey ?? !opts.newKey;
+  if (useCliKey) {
     agentKey = requireKey();
     console.error(JSON.stringify({ info: "Using CLI wallet key for agent." }));
   } else {
     agentKey = nodeCrypto.randomBytes(32).toString("hex");
-    console.error(JSON.stringify({ info: "Generated new private key for agent." }));
+    console.error(JSON.stringify({ info: "Generated separate private key for agent." }));
   }
 
   // Fetch latest SDK version
@@ -1314,7 +1328,12 @@ func main() {
     console.error(JSON.stringify({ warn: "go mod tidy failed — run it manually after installing Go 1.24+." }));
   }
 
-  return { dir, agentId, files: [metaFilename, "main.go", "go.mod", ".env", ".gitignore"] };
+  return {
+    dir,
+    agentId,
+    files: [metaFilename, "main.go", "go.mod", ".env", ".gitignore"],
+    keyMode: useCliKey ? "cli_wallet" : "new_key",
+  };
 }
 
 agentCmd.command("create")
@@ -1328,8 +1347,13 @@ agentCmd.command("create")
   .option("--short-description <desc>", "Short description")
   .option("--category <cat>", "Category (can specify multiple)", (val: string, prev: string[]) => prev.concat(val), [] as string[])
   .option("--metadata-only", "Only create metadata JSON, skip Go project scaffolding")
-  .option("--use-cli-key", "Reuse the CLI wallet key for the agent")
+  .option("--new-key", "Generate a separate private key for the agent instead of reusing the CLI wallet")
+  .addOption(new Option("--use-cli-key", "Reuse the CLI wallet key for the agent (default)").hideHelp())
   .action(async (name: string, opts: any) => {
+    if (opts.useCliKey && opts.newKey) {
+      fail("Choose only one of --use-cli-key or --new-key.");
+    }
+
     let agentId = opts.id;
     let agentType = opts.type || "command";
     let description = opts.description;
@@ -1390,8 +1414,15 @@ agentCmd.command("create")
 
     // Scaffold the full Go project unless --metadata-only
     if (!metadataOnly) {
-      const result = await scaffoldAgent(metadata, { type: opts.template || "enhanced", useCliKey: !!opts.useCliKey });
+      const result = await scaffoldAgent(metadata, {
+        type: opts.template || "enhanced",
+        useCliKey: opts.useCliKey ? true : undefined,
+        newKey: !!opts.newKey,
+      });
       const metaFile = `${result.dir}/${agentId}-metadata.json`;
+      const envLabel = result.keyMode === "cli_wallet"
+        ? "CLI wallet key (default)"
+        : "separate private key (--new-key)";
 
       if (JSON_FLAG) {
         out({
@@ -1400,6 +1431,7 @@ agentCmd.command("create")
           name,
           directory: result.dir,
           files: result.files,
+          key_mode: result.keyMode,
           next_steps: [
             `Edit ${metaFile} to define your commands, capabilities, and pricing`,
             `Edit ${result.dir}/main.go to implement your agent logic in ProcessTask`,
@@ -1412,7 +1444,7 @@ agentCmd.command("create")
         console.log(`  Files:`);
         console.log(`    ${metaFile}   <- commands, pricing, description`);
         console.log(`    ${result.dir}/main.go${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/main.go`.length))}   <- your agent logic (ProcessTask)`);
-        console.log(`    ${result.dir}/.env${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/.env`.length))}   <- private key (auto-generated)`);
+        console.log(`    ${result.dir}/.env${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/.env`.length))}   <- ${envLabel}`);
         console.log(``);
         console.log(`  What to do now:`);
         console.log(`  1. Edit ${metaFile}`);
@@ -1494,7 +1526,7 @@ async function publishAgent(agentId: string, manualTokenId?: number) {
   if (!res.ok) {
     const baseMessage = data.message || data.error || `HTTP ${res.status}`;
     if (/wallet does not own this agent'?s nft/i.test(baseMessage)) {
-      fail(`${baseMessage}. Publish used ${source}. If this is the wrong wallet, run with TENEO_PRIVATE_KEY set to the wallet that minted the agent NFT, or deploy with --use-cli-key.`);
+      fail(`${baseMessage}. Publish used ${source}. New agents use the CLI wallet by default. If this agent was created with a separate PRIVATE_KEY, run with TENEO_PRIVATE_KEY set to the wallet that minted the agent NFT.`);
     }
     fail(baseMessage);
   }
@@ -1548,7 +1580,7 @@ async function unpublishAgent(agentId: string, manualTokenId?: number) {
   if (!res.ok) {
     const baseMessage = data.message || data.error || `HTTP ${res.status}`;
     if (/wallet does not own this agent'?s nft/i.test(baseMessage)) {
-      fail(`${baseMessage}. Unpublish used ${source}. If this is the wrong wallet, run with TENEO_PRIVATE_KEY set to the wallet that minted the agent NFT, or deploy with --use-cli-key.`);
+      fail(`${baseMessage}. Unpublish used ${source}. New agents use the CLI wallet by default. If this agent was created with a separate PRIVATE_KEY, run with TENEO_PRIVATE_KEY set to the wallet that minted the agent NFT.`);
     }
     fail(baseMessage);
   }
