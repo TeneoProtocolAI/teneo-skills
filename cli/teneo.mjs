@@ -391,7 +391,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program = new Command();
-program.name("teneo-cli").version("2.0.45").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program.name("teneo-cli").version("2.0.46").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
   program.addHelpText("afterAll", `
 ${GREETING_INSTALL_TEXT}
@@ -948,7 +948,7 @@ async function ensureGo() {
     fail(`Failed to install Go: ${err.message}. Install manually from https://go.dev/dl/`);
   }
 }
-var SDK_FALLBACK_VERSION = "v0.8.0";
+var SDK_FALLBACK_VERSION = "v0.8.2";
 async function getLatestSDKVersion() {
   try {
     const res = await fetch("https://api.github.com/repos/TeneoProtocolAI/teneo-agent-sdk/tags?per_page=1", {

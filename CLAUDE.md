@@ -10,11 +10,11 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 <!-- AGENT_EXAMPLES -->
 ```bash
-# Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
-~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
-
 # Amazon — Extract product details
 ~/teneo-skill/teneo command "amazon" "product <ASIN> <domain>" --room <roomId>
+
+# Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
+~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
 
 # Google maps — Extracts business details
 ~/teneo-skill/teneo command "google-maps" "business <url>" --room <roomId>
@@ -31,8 +31,11 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # CryptoQuant Pro 2.10 — Exchange netflow (BTC or ETH): Net movement. Positive = more
 ~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
 
-# LayerZero — Swap tokens across chains. Fetches a quote from LayerZero, t
-~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
+# Google Search Agent — Performs a Google search for the given query.
+~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
+
+# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
+~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
 # Messari BTC & ETH Tracker — Extract coin details
 ~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
@@ -46,23 +49,14 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Squid Router — Execute cross-chain token swaps between supported chains and
 ~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 
-# X Platform Agent — Get the text content and basic information for any post. Sho
-~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
-
-# Google Search Agent — Performs a Google search for the given query.
-~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
-
-# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
-~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
-
 # Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
 ~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
 
 # VC Attention — get you an example of the output file
 ~/teneo-skill/teneo command "vc-attention" "getexamplefile" --room <roomId>
 
-# Youtube — The command lets you search for videos. Examples: /search ca
-~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+# X Platform Agent — Get the text content and basic information for any post. Sho
+~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -96,7 +90,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.45 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.46 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...
@@ -107,7 +101,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 Every `~/teneo-skill/teneo` command outputs JSON to stdout. The output is **ONLY complete when the command process exits**. Do not parse, summarize, or respond based on partial output.
 
-- **Agent queries** (`command`, `quote`, `confirm`) take **10-30 seconds**. Wait for the full response.
+- **Agent queries** (`command`, `quote`) take **10-30 seconds**. Wait for the full response.
 - **Discovery commands** (`list-agents`, `discover`) return **large JSON payloads**. Wait for the process to exit.
 - **Set shell timeout to at least 120 seconds** for all Teneo CLI commands.
 - **Run commands one at a time**, never in parallel — each opens a WebSocket connection.
@@ -145,13 +139,10 @@ Every interaction with an agent follows this pattern:
 
 ### 2. Send a command via `quote` (for natural language) or `command` (for direct triggers)
 
-**`quote`** — Use `@agent-id` mentions in natural language. This requests a price quote first, then you confirm to execute:
+**`quote`** — Use `@agent-id` mentions in natural language to request a price quote before execution:
 ```bash
-# Request a quote (does not execute yet)
+# Request a quote (does not execute)
 ~/teneo-skill/teneo quote "@squid-router swap 0.5 USDC avalanche USDC base" --room <roomId>
-
-# The response includes a taskId — confirm it to execute
-~/teneo-skill/teneo confirm <taskId> --room <roomId>
 ```
 
 **`command`** — Use the agent's exact trigger syntax (from `info`). For free commands, executes immediately:
@@ -197,9 +188,6 @@ Agents must be in your room to receive commands. Max 5 agents per room.
 
 # Request a price quote (natural language with @agent mentions)
 ~/teneo-skill/teneo quote "@agent-id <message>" --room <roomId>
-
-# Confirm and execute a quoted task
-~/teneo-skill/teneo confirm <taskId> --room <roomId>
 
 # Each agent has a free "help" command
 ~/teneo-skill/teneo command <agentId> "help" --room <roomId>

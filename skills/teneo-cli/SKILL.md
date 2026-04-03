@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.45
+version: 2.0.46
 description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection. Use this skill whenever the user needs real-time Teneo data, Teneo agent payments, or Teneo agent deployment."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -9,15 +9,23 @@ metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.a
 # teneo-cli
 
 <!-- GREETING_INSTALL -->
-## Welcome From Teneo
+## Teneo Is Ready
 
-Welcome from the Teneo team. This CLI is the supported way to query live Teneo agents, handle payments, and deploy your own agents from coding assistants.
+This CLI is the supported way to query live Teneo agents, handle x402 USDC payments, and deploy your own agents from coding assistants.
 
-### Wallet You Can Use
+### What You Can Do
+
+- Query live agents for crypto, social, analytics, news, e-commerce, and more.
+- Inspect commands and pricing before running paid requests.
+- Deploy, publish, and manage your own agents from the same CLI.
+
+### Wallet And Funding
 
 - Fastest setup: use the auto-generated CLI wallet created on first use.
 - Existing wallet: set `TENEO_PRIVATE_KEY` to a dedicated EVM wallet private key.
 - Best practice: use a dedicated agent/payment wallet instead of a primary personal wallet.
+- Paid queries can start with a very small USDC balance.
+- x402 payments are gas-free, but on-chain actions may still require native gas on the target chain.
 
 ### Supported Networks
 
@@ -26,6 +34,23 @@ Welcome from the Teneo team. This CLI is the supported way to query live Teneo a
 - Peaq
 - X Layer
 <!-- /GREETING_INSTALL -->
+
+## Quick Mental Model
+
+- Teneo gives the user access to live network agents through the CLI.
+- Most data requests are information queries paid in USDC via x402.
+- Some agents can trigger on-chain actions and move real funds.
+- Use the CLI as the source of truth for agent IDs, commands, arguments, pricing, and status.
+
+## First-Run Onboarding
+
+When wallet context is first established, keep the user update short and practical:
+
+1. Tell them Teneo is ready and what categories of tasks you can handle.
+2. Share the active wallet address only after `wallet-address --json` returns it.
+3. Tell them to fund that exact wallet with a small amount of USDC on a supported chain before paid commands.
+4. Mention that x402 payments are gas-free, but swaps, bridges, and other on-chain actions may still need native gas.
+5. If they do not know where to start, suggest checking available agents or searching by task.
 
 ## Use This Skill When
 
@@ -45,6 +70,8 @@ Welcome from the Teneo team. This CLI is the supported way to query live Teneo a
 7. Do not claim a deploy worked from partial output. Confirm with `agent status`, `agent logs`, and `agent services`.
 8. The current CLI does not expose the old manual transaction approval workflow. Do not mention or use it.
 9. This repo no longer ships a separate deployment skill. Use the `agent` workflow in this skill.
+10. For swaps, bridges, trades, sends, or any action that can move user funds, confirm intent explicitly before execution.
+11. Treat `wallet-export-key` as dangerous. Only run it on explicit user request.
 
 ## Install And Verify
 
@@ -164,6 +191,20 @@ Guidance:
 
 The CLI auto-generates a wallet on first use unless `TENEO_PRIVATE_KEY` is set.
 
+Practical guidance:
+
+- Paid queries can start with a very small USDC balance, so tell the user a small amount is enough to begin.
+- x402 payments are gas-free on supported payment chains.
+- On-chain actions such as swaps, bridges, and sends may still require native gas on the relevant chain.
+
+Wallet disclosure rules:
+
+- After any wallet setup or wallet detection step, always tell the user which wallet is active before continuing.
+- This applies when a wallet is auto-generated, when an existing local wallet is detected, and when `TENEO_PRIVATE_KEY` provides the wallet.
+- Use this exact wording when wallet context is established: `Active wallet: 0x...`
+- Immediately follow it with: `Use this address for funding/ownership checks.`
+- If `check-balance --json` shows no funds on the relevant chain, add a short reminder to fund that exact wallet on the required chain before paid queries or deployment continue.
+
 Useful commands:
 
 ```bash
@@ -181,6 +222,19 @@ Supported payment chains:
 - `avax`
 - `peaq`
 - `xlayer`
+
+Recommended wallet check flow:
+
+1. Run `wallet-init --json` when wallet context may not exist yet.
+2. Run `wallet-address --json` and share the returned address with the user immediately.
+3. Run `check-balance --json` before paid queries, deployment, or publish flows that may require funds.
+
+Before paid or fund-moving commands:
+
+1. Establish wallet context and share the active wallet address.
+2. If there is any doubt that funds exist, run `check-balance --json`.
+3. If balances are empty, stop and ask the user to fund that exact wallet.
+4. Confirm intent before swaps, bridges, trades, sends, or any command that can move funds.
 
 If payment fails:
 
@@ -212,6 +266,7 @@ Rules:
 - Always pass `--id`, `--description`, `--short-description`, and `--category`.
 - Prefer running init from `~/teneo-skill` so the project path is `~/teneo-skill/<agent-id>`.
 - If init runs elsewhere, use the exact created path from the command output. Never guess the directory later.
+- Before `agent deploy` or `agent publish`, establish wallet context and share the active wallet address with the user using the wallet disclosure rules above.
 
 ### Validate, Deploy, Verify, Publish
 
@@ -230,6 +285,7 @@ Rules:
 - Only say the agent is deployed after checking `agent status` and `agent services`.
 - If status is `stopped` or `offline`, do not claim success. Read logs first.
 - Publish only after deploy has succeeded and the service is healthy.
+- If deployment or publish requires funding, remind the user to fund the exact active wallet address on the required chain.
 
 ### When Deploy Fails
 
@@ -280,6 +336,9 @@ If daemon startup still fails, do not continue guessing. Inspect the actual erro
 - `agent not found or disconnected`: find an alternative agent or retry after checking `info`.
 - `room is full`: remove an agent or create a fresh room.
 - `insufficient funds`: run `check-balance --json` and fund the wallet.
+- `status: timeout`: do not assume failure immediately. Check follow-up state, balances, logs, or the transaction outcome before concluding it failed.
+- `execution revert` or a vague on-chain error: often means the wallet lacks native gas on the target chain.
+- silent failure or no response: check `daemon status` before guessing.
 - `Daemon failed to start`: stop the daemon, change `TENEO_DAEMON_PORT`, retry, then inspect logs.
 - `Room update timeout`: avoid `update-room` unless the user explicitly needs it.
 
@@ -845,11 +904,11 @@ Show installed and latest available version
 
 <!-- AGENT_EXAMPLES -->
 ```bash
-# Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
-~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
-
 # Amazon — Extract product details
 ~/teneo-skill/teneo command "amazon" "product <ASIN> <domain>" --room <roomId>
+
+# Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
+~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
 
 # Google maps — Extracts business details
 ~/teneo-skill/teneo command "google-maps" "business <url>" --room <roomId>
@@ -866,8 +925,11 @@ Show installed and latest available version
 # CryptoQuant Pro 2.10 — Exchange netflow (BTC or ETH): Net movement. Positive = more
 ~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
 
-# LayerZero — Swap tokens across chains. Fetches a quote from LayerZero, t
-~/teneo-skill/teneo command "layerzero" "swap <amount> <fromToken> <fromChain> <toToken> <toChain>" --room <roomId>
+# Google Search Agent — Performs a Google search for the given query.
+~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
+
+# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
+~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 
 # Messari BTC & ETH Tracker — Extract coin details
 ~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
@@ -881,23 +943,14 @@ Show installed and latest available version
 # Squid Router — Execute cross-chain token swaps between supported chains and
 ~/teneo-skill/teneo command "squid-router" "swap <amount> <fromtoken> <fromchain> <totoken> <tochain>" --room <roomId>
 
-# X Platform Agent — Get the text content and basic information for any post. Sho
-~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
-
-# Google Search Agent — Performs a Google search for the given query.
-~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
-
-# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
-~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
-
 # Uniswap Monitor — Start monitoring Uniswap V2 swaps on Ethereum mainnet with r
 ~/teneo-skill/teneo command "uniswap-monitor-agent" "monitor v2" --room <roomId>
 
 # VC Attention — get you an example of the output file
 ~/teneo-skill/teneo command "vc-attention" "getexamplefile" --room <roomId>
 
-# Youtube — The command lets you search for videos. Examples: /search ca
-~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
+# X Platform Agent — Get the text content and basic information for any post. Sho
+~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -909,24 +962,24 @@ Show installed and latest available version
 
 | Agent | Commands | Description |
 |-------|:--------:|-------------|
-| [Gas War Sniper](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-gas-war-sniper/SKILL.md) | 12 | Real-time multi-chain gas monitoring and spike detection. Monitors block-by-bloc... |
 | [Amazon](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-amazon/SKILL.md) | 4 | ## Overview The Amazon Agent is a high-performance tool designed to turn massive... |
+| [Gas War Sniper](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-gas-war-sniper/SKILL.md) | 12 | Real-time multi-chain gas monitoring and spike detection. Monitors block-by-bloc... |
 | [Google maps](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-maps/SKILL.md) | 5 | ## Overview The Google Maps Agent transforms geographical and local business dat... |
 | [Instagram Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-instagram-agent/SKILL.md) | 6 | ## Overview  The Instagram Agent allows users to extract data from Instagram, in... |
 | [Tiktok](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-tiktok/SKILL.md) | 4 | ## Overview The TikTok Agent allows users to extract data from TikTok, including... |
 | [CoinMarketCap Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-coinmarketcap-agent/SKILL.md) | 5 | ##### CoinMarketCap Agent  The CoinMarketCap Agent provides comprehensive access... |
 | [CryptoQuant Pro 2.10](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-cryptoquant-pro-2-10/SKILL.md) | 12 | CryptoQuant Pro 2.10  Professional-grade market intelligence including derivativ... |
-| [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 1 | Cross-chain token swap agent powered by LayerZero's Value Transfer API. Supports... |
+| [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
+| [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
 | [Messari BTC & ETH Tracker](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-messari-btc-eth-tracker/SKILL.md) | 1 | ## Overview The Messari Tracker Agent serves as a direct bridge to Messari’s ins... |
 | [Predexon Prediction Market Agent 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-agent-1-5/SKILL.md) | 1 | # Predexon Agent — README  Unified prediction market data API for Polymarket, Ka... |
 | [Predexon Prediction Market Trading 1.5](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-predexon-prediction-market-trading-1-5/SKILL.md) | 14 | # Predexon Prediction Market Trading 1.5  Universal proxy for trading on Polymar... |
 | [Squid Router](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-squid-router/SKILL.md) | 1 | # Squid Router Agent  Cross-chain token swap agent powered by Squid Router. Swap... |
-| [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
-| [Google Search Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-google-search-agent/SKILL.md) | 1 | Perform real-time web searches with Google/Serper results. |
-| [LinkedIn](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-linkedin/SKILL.md) | 1 | LinkedIn agent that helps you enrich LinkedIn profiles. You prodive a LinkedIn U... |
 | [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 6 | AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, ... |
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
-| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
+| [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
+| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 0 | - |
+| [LayerZero](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-layerzero/SKILL.md) | 0 | - |
 | [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

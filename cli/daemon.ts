@@ -334,6 +334,33 @@ function formatTxHashWithChain(txHash: string, chainId: number): string {
   return name ? `${txHash}|${name}` : txHash;
 }
 
+function isRelevantAgentError(msg: string): boolean {
+  return msg.includes("Payment verification failed") ||
+    msg.includes("payment") ||
+    msg.includes("Agent not found") ||
+    msg.includes("not found") ||
+    msg.includes("insufficient");
+}
+
+function isFlowComplete(content: string): boolean {
+  const lower = content.toLowerCase();
+  return lower.includes("swap completed") ||
+    lower.includes("swap successful") ||
+    lower.includes("swap failed") ||
+    lower.includes("bridge completed") ||
+    lower.includes("transfer completed");
+}
+
+function isIntermediateMessage(content: string): boolean {
+  const lower = content.toLowerCase();
+  return lower.includes("transaction confirmed") ||
+    lower.includes("approval confirmed") ||
+    lower.includes("approved") ||
+    lower.includes("preparing swap") ||
+    lower.includes("proceeding") ||
+    lower.includes("next step");
+}
+
 async function waitForTxReceipt(chainId: number, txHash: string): Promise<{ reverted: boolean }> {
   const chain = getChain(chainId);
   const client = createPublicClient({ chain, transport: viemHttp() });
@@ -366,12 +393,298 @@ async function signBroadcastAndConfirm(
   if (receipt.reverted) {
     log(`TX reverted on-chain: ${txHash}`);
     await (sdkInstance as any).sendTxResult(taskId, "failed", formattedHash, "Transaction reverted on-chain", room, tx.chainId);
+    (sdkInstance as any).emit("wallet:tx_completed", {
+      taskId,
+      status: "failed",
+      txHash: formattedHash,
+      error: "Transaction reverted on-chain",
+      room,
+      chainId: tx.chainId,
+    });
     return { txHash, status: "failed", error: "Transaction reverted on-chain" };
   }
 
   log(`TX confirmed: ${txHash}`);
   await (sdkInstance as any).sendTxResult(taskId, "confirmed", formattedHash, undefined, room, tx.chainId);
+  (sdkInstance as any).emit("wallet:tx_completed", {
+    taskId,
+    status: "confirmed",
+    txHash: formattedHash,
+    room,
+    chainId: tx.chainId,
+  });
   return { txHash, status: "confirmed" };
+}
+
+async function runMultiStepTxFlow(
+  s: TeneoSDK,
+  {
+    agent,
+    commandLabel,
+    effectiveTimeout,
+    initialTaskId,
+    start,
+  }: {
+    agent: string;
+    commandLabel: string;
+    effectiveTimeout: number;
+    initialTaskId?: string | null;
+    start: () => Promise<void>;
+  },
+): Promise<any> {
+  log(`Tracking command flow for "${commandLabel}"`);
+
+  const agentLower = agent.toLowerCase();
+  const messages: any[] = [];
+  let txCount = 0;
+  let activeTaskId = initialTaskId || null;
+  let taskConfirmedSeen = !!initialTaskId;
+
+  return await new Promise<any>((resolve, reject) => {
+    let idleTimer: ReturnType<typeof setTimeout>;
+    let finalizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const settle = (fn: (value: any) => void, value: any) => {
+      clearTimeout(flowTimeout);
+      if (finalizeTimer) clearTimeout(finalizeTimer);
+      cleanup();
+      fn(value);
+    };
+
+    const recordTaskId = (taskId?: string) => {
+      if (!taskId || taskId.startsWith("msg-") || activeTaskId) return;
+      activeTaskId = taskId;
+      taskConfirmedSeen = true;
+      log(`Tracking multi-step task ${taskId} for ${agent}`);
+    };
+
+    const matchesAgent = (value?: string) => !!value && value.toLowerCase() === agentLower;
+    const matchesTask = (taskId?: string) => !!activeTaskId && !!taskId && taskId === activeTaskId;
+    const matchesInitialTask = (taskId?: string) => !!initialTaskId && !!taskId && taskId === initialTaskId;
+    const isSyntheticTaskId = (taskId?: string) => !!taskId && taskId.startsWith("msg-");
+
+    const shouldTrackTxEvent = (data: any) => {
+      if (matchesTask(data.taskId) || matchesInitialTask(data.taskId)) return true;
+      if (initialTaskId && data.taskId && data.taskId !== initialTaskId) return false;
+      return !activeTaskId && matchesAgent(data.agentName);
+    };
+
+    const shouldTrackAgentResponse = (response: any) => {
+      if (matchesTask(response.taskId) || matchesInitialTask(response.taskId)) return true;
+      if (isSyntheticTaskId(response.taskId)) {
+        return matchesAgent(response.agentId) || matchesAgent(response.agentName);
+      }
+      if (activeTaskId) return false;
+      return matchesAgent(response.agentId) || matchesAgent(response.agentName);
+    };
+
+    const clearFinalizeTimer = () => {
+      if (finalizeTimer) {
+        clearTimeout(finalizeTimer);
+        finalizeTimer = null;
+      }
+    };
+
+    const buildTaskFlowResult = (status: "completed" | "error" | "timeout", taskId?: string) => ({
+      steps: messages,
+      txCount,
+      taskId: activeTaskId || initialTaskId || taskId || undefined,
+      status,
+    });
+
+    const scheduleTaskFlowResolve = (status: "completed" | "error", taskId?: string, delayMs: number = 5000) => {
+      clearFinalizeTimer();
+      finalizeTimer = setTimeout(() => {
+        settle(resolve, buildTaskFlowResult(status, taskId));
+      }, delayMs);
+    };
+
+    const scheduleSimpleResponseResolve = (response: any, delayMs: number = 1000) => {
+      clearFinalizeTimer();
+      finalizeTimer = setTimeout(() => {
+        settle(resolve, {
+          humanized: response.humanized,
+          raw: response.raw,
+          content: response.content,
+          metadata: response.metadata,
+        });
+      }, delayMs);
+    };
+
+    const resetIdleTimer = (label: string) => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        log(`Idle timeout reached after last activity: ${label}`);
+        if (messages.length > 0) {
+          settle(resolve, {
+            ...buildTaskFlowResult("timeout"),
+            note: "Flow idle-timed out but some steps completed",
+          });
+          return;
+        }
+        settle(reject, new Error("Multi-step TX flow timed out with no responses"));
+      }, TX_FOLLOWUP_TIMEOUT_MS);
+    };
+
+    const flowTimeout = setTimeout(() => {
+      clearFinalizeTimer();
+      clearTimeout(idleTimer);
+      if (messages.length > 0) {
+        settle(resolve, {
+          ...buildTaskFlowResult("timeout"),
+          note: "Flow timed out but some steps completed",
+        });
+        return;
+      }
+      settle(reject, new Error("Multi-step TX flow timed out with no responses"));
+    }, effectiveTimeout);
+
+    const sdkErrorHandler = (err: Error) => {
+      if (isRelevantAgentError(err.message)) {
+        settle(reject, new Error(`Agent error: ${err.message}`));
+      }
+    };
+
+    const agentSelectedHandler = (data: any) => {
+      const selectedId = data.agentId || data.agentName || "";
+      if (selectedId && selectedId.toLowerCase() !== agentLower) {
+        settle(reject, new Error(`Direct-agent mismatch: expected "${agent}", coordinator selected "${selectedId}"`));
+      }
+    };
+
+    const taskConfirmedHandler = (data: any) => {
+      if (!matchesInitialTask(data.taskId) && !matchesAgent(data.agentId) && !matchesAgent(data.agentName)) {
+        return;
+      }
+      clearFinalizeTimer();
+      taskConfirmedSeen = true;
+      recordTaskId(data.taskId);
+      messages.push({
+        type: "task_confirmed",
+        taskId: data.taskId,
+        agentId: data.agentId,
+        agentName: data.agentName,
+        timestamp: new Date().toISOString(),
+      });
+      resetIdleTimer("task confirmed");
+    };
+
+    const txHandler = (data: any) => {
+      if (!shouldTrackTxEvent(data)) return;
+      clearFinalizeTimer();
+      recordTaskId(data.taskId);
+      txCount++;
+      log(`Multi-step TX #${txCount} requested by ${data.agentName || agent}`);
+      messages.push({
+        type: "tx_requested",
+        taskId: data.taskId,
+        txCount,
+        description: data.description,
+        timestamp: new Date().toISOString(),
+      });
+      resetIdleTimer(`TX #${txCount} requested`);
+    };
+
+    const txResultHandler = (data: any) => {
+      if (!matchesTask(data.taskId) && !matchesInitialTask(data.taskId)) return;
+      clearFinalizeTimer();
+      recordTaskId(data.taskId);
+      log(`TX result: ${data.status} ${data.txHash || ""}`);
+      messages.push({
+        type: "tx_result",
+        taskId: data.taskId,
+        status: data.status,
+        txHash: data.txHash,
+        error: data.error,
+        timestamp: new Date().toISOString(),
+      });
+      resetIdleTimer(`TX result: ${data.status}`);
+    };
+
+    const agentResponseHandler = (response: any) => {
+      if (!shouldTrackAgentResponse(response)) return;
+      clearFinalizeTimer();
+      recordTaskId(response.taskId);
+
+      const content = response.content || response.humanized || "";
+      log(`Multi-step msg from ${agent}: ${content.substring(0, 100)}...`);
+      messages.push({
+        type: "agent_message",
+        taskId: response.taskId,
+        humanized: response.humanized || content,
+        raw: response.raw,
+        content,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (isFlowComplete(content)) {
+        clearTimeout(idleTimer);
+        scheduleTaskFlowResolve("completed", response.taskId, 5000);
+        return;
+      }
+
+      if (response.error || content.toLowerCase().includes("error")) {
+        clearTimeout(idleTimer);
+        scheduleTaskFlowResolve("error", response.taskId, 5000);
+        return;
+      }
+
+      if (isIntermediateMessage(content)) {
+        resetIdleTimer(`intermediate: ${content.substring(0, 40)}`);
+        return;
+      }
+
+      const isSimpleResponse = txCount === 0 &&
+        !taskConfirmedSeen &&
+        !initialTaskId &&
+        isSyntheticTaskId(response.taskId);
+
+      if (isSimpleResponse) {
+        scheduleSimpleResponseResolve(response, 1000);
+        return;
+      }
+
+      scheduleTaskFlowResolve("completed", response.taskId, 5000);
+      resetIdleTimer("agent message");
+    };
+
+    const agentErrorHandler = (data: any) => {
+      if (!matchesTask(data.taskId) &&
+        !matchesInitialTask(data.taskId) &&
+        !(matchesAgent(data.agentName) && (!activeTaskId || !data.taskId))) {
+        return;
+      }
+
+      const errMsg = data.content || "";
+      if (errMsg) {
+        settle(reject, new Error(`Agent error: ${errMsg}`));
+      }
+    };
+
+    const cleanup = () => {
+      clearFinalizeTimer();
+      clearTimeout(idleTimer);
+      s.off("error", sdkErrorHandler);
+      s.off("agent:selected", agentSelectedHandler);
+      s.off("task:confirmed", taskConfirmedHandler);
+      s.off("wallet:tx_requested", txHandler);
+      s.off("wallet:tx_completed", txResultHandler);
+      s.off("agent:response", agentResponseHandler);
+      s.off("agent:error", agentErrorHandler);
+    };
+
+    s.on("error", sdkErrorHandler);
+    s.on("agent:selected", agentSelectedHandler);
+    s.on("task:confirmed", taskConfirmedHandler);
+    s.on("wallet:tx_requested", txHandler);
+    s.on("wallet:tx_completed", txResultHandler);
+    s.on("agent:response", agentResponseHandler);
+    s.on("agent:error", agentErrorHandler);
+
+    resetIdleTimer("flow start");
+
+    start().catch((err: any) => settle(reject, err));
+  });
 }
 
 function registerTxSigner(sdkInstance: TeneoSDK) {
@@ -389,6 +702,13 @@ function registerTxSigner(sdkInstance: TeneoSDK) {
     } catch (err: any) {
       log(`TX failed: ${err.message}`);
       await (sdkInstance as any).sendTxResult(taskId, "failed", undefined, err.message, room, tx.chainId);
+      (sdkInstance as any).emit("wallet:tx_completed", {
+        taskId,
+        status: "failed",
+        error: err.message,
+        room,
+        chainId: tx.chainId,
+      });
     }
   });
 }
@@ -867,271 +1187,13 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
     const messageOptions = buildMessageOptions();
 
-    // Detect if this is a multi-step TX flow (swap, approve, bridge, etc.)
-    const cmdLower = cmd.toLowerCase();
-    const isMultiStepTx = cmdLower.startsWith("swap") || cmdLower.startsWith("bridge") || cmdLower.startsWith("transfer");
-
-    const wsClient = (s as any).wsClient;
-
-    if (isMultiStepTx) {
-      // Multi-step TX flow: collect ALL messages from this agent until we get a final result or timeout
-      log(`Multi-step TX flow detected for "${cmd}"`);
-      const messages: any[] = [];
-      let txCount = 0;
-
-      const result = await new Promise<any>((resolve, reject) => {
-        // Track TX signing activity to know when to keep waiting
-        let lastTxTime = 0;
-        const txWaitGrace = 30000; // wait 30s after last TX/message for next step
-
-        // Rolling idle timeout: resets on every TX or message from the agent.
-        // The flow stays alive as long as steps keep happening.
-        let idleTimer: ReturnType<typeof setTimeout>;
-        const resetIdleTimer = (label: string) => {
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(() => {
-            log(`Idle timeout reached after last activity: ${label}`);
-            cleanup();
-            if (messages.length > 0) {
-              resolve({ steps: messages, txCount, status: "timeout", note: "Flow idle-timed out but some steps completed" });
-            } else {
-              reject(new Error("Multi-step TX flow timed out with no responses"));
-            }
-          }, txWaitGrace);
-        };
-
-        // Hard cap so a stuck flow can't hang forever
-        const flowTimeout = setTimeout(() => {
-          clearTimeout(idleTimer);
-          cleanup();
-          if (messages.length > 0) {
-            resolve({ steps: messages, txCount, status: "timeout", note: "Flow timed out but some steps completed" });
-          } else {
-            reject(new Error("Multi-step TX flow timed out with no responses"));
-          }
-        }, effectiveTimeout);
-
-        // Start the idle timer
-        resetIdleTimer("flow start");
-
-        const isRelevantError = (msg: string) =>
-          msg.includes("Payment verification failed") ||
-          msg.includes("payment") ||
-          msg.includes("Agent not found") ||
-          msg.includes("not found") ||
-          msg.includes("insufficient");
-
-        // Messages that mean the entire flow is done (not just one step)
-        const isFlowComplete = (content: string) => {
-          const lower = content.toLowerCase();
-          return lower.includes("swap completed") ||
-            lower.includes("swap successful") ||
-            lower.includes("swap failed") ||
-            lower.includes("bridge completed") ||
-            lower.includes("transfer completed");
-        };
-
-        // Messages that indicate progress but NOT completion — the flow continues
-        const isIntermediateMessage = (content: string) => {
-          const lower = content.toLowerCase();
-          return lower.includes("transaction confirmed") ||
-            lower.includes("approval confirmed") ||
-            lower.includes("approved") ||
-            lower.includes("preparing swap") ||
-            lower.includes("proceeding") ||
-            lower.includes("next step");
-        };
-
-        // Listen for TX requests from this agent (the global signer handles signing,
-        // but we track them here to know the flow is still in progress)
-        const txHandler = (data: any) => {
-          txCount++;
-          lastTxTime = Date.now();
-          log(`Multi-step TX #${txCount} requested by ${data.agentName || agent}`);
-          messages.push({ type: "tx_requested", txCount, description: data.description, timestamp: new Date().toISOString() });
-          resetIdleTimer(`TX #${txCount} requested`);
-        };
-
-        // Listen for TX results (signed by the global signer)
-        const txResultHandler = (data: any) => {
-          log(`TX result: ${data.status} ${data.txHash || ""}`);
-          messages.push({ type: "tx_result", status: data.status, txHash: data.txHash, timestamp: new Date().toISOString() });
-          resetIdleTimer(`TX result: ${data.status}`);
-        };
-
-        // Listen for all messages from this agent
-        const msgHandler = (msg: any) => {
-          // Direct-agent mismatch guard — if coordinator routes to wrong agent, fail fast
-          if (msg.type === "agent_selected") {
-            const selectedId = msg.data?.agent_id || msg.content?.agent_id || "";
-            if (selectedId && selectedId.toLowerCase() !== agent.toLowerCase()) {
-              log(`Direct-agent mismatch: expected "${agent}", got "${selectedId}"`);
-              clearTimeout(flowTimeout);
-              cleanup();
-              reject(new Error(`Direct-agent mismatch: expected "${agent}", coordinator selected "${selectedId}"`));
-              return;
-            }
-          }
-
-          if (msg.type === "message" && (msg.from === agent || msg.data?.agent_id === agent)) {
-            const content = msg.content || msg.humanized || "";
-            log(`Multi-step msg from ${agent}: ${content.substring(0, 100)}...`);
-            messages.push({
-              type: "agent_message",
-              humanized: msg.humanized || content,
-              raw: msg,
-              content,
-              timestamp: new Date().toISOString(),
-            });
-
-            // Determine if the flow is complete or still in progress
-            if (isFlowComplete(content)) {
-              // Definitive completion — resolve after short grace for trailing messages
-              log(`Flow complete: "${content.substring(0, 80)}". Resolving in 5s...`);
-              clearTimeout(idleTimer);
-              setTimeout(() => {
-                clearTimeout(flowTimeout);
-                cleanup();
-                resolve({ steps: messages, txCount, status: "completed" });
-              }, 5000);
-            } else if (isIntermediateMessage(content)) {
-              // Intermediate step (e.g. approve confirmed) — keep waiting for the next TX
-              log(`Intermediate step (TX #${txCount}): "${content.substring(0, 80)}". Waiting up to ${txWaitGrace / 1000}s for next step...`);
-              lastTxTime = Date.now();
-              resetIdleTimer(`intermediate: ${content.substring(0, 40)}`);
-            } else if (content.toLowerCase().includes("error")) {
-              // Error message — resolve with what we have
-              log(`Error detected: "${content.substring(0, 80)}". Resolving in 5s...`);
-              clearTimeout(idleTimer);
-              setTimeout(() => {
-                clearTimeout(flowTimeout);
-                cleanup();
-                resolve({ steps: messages, txCount, status: "error" });
-              }, 5000);
-            } else {
-              // Any other agent message — keep the flow alive
-              resetIdleTimer(`agent message`);
-            }
-          }
-
-          // Handle errors
-          if (msg.type === "error" && msg.data) {
-            const errMsg = msg.data.message || msg.content || "";
-            const errCode = msg.data.code || 0;
-            if (isRelevantError(errMsg) || errCode === 402) {
-              clearTimeout(flowTimeout);
-              cleanup();
-              reject(new Error(`Agent error (${errCode}): ${errMsg}`));
-            }
-          }
-        };
-
-        const sdkErrorHandler = (err: Error) => {
-          if (isRelevantError(err.message)) {
-            clearTimeout(flowTimeout);
-            cleanup();
-            reject(new Error(`Agent error: ${err.message}`));
-          }
-        };
-
-        const cleanup = () => {
-          clearTimeout(idleTimer);
-          s.off("error", sdkErrorHandler);
-          s.off("wallet:tx_requested", txHandler);
-          s.off("wallet:tx_completed", txResultHandler);
-          if (wsClient) {
-            wsClient.off("message:received", msgHandler);
-          }
-        };
-
-        s.on("error", sdkErrorHandler);
-        s.on("wallet:tx_requested", txHandler);
-        s.on("wallet:tx_completed", txResultHandler);
-        if (wsClient) {
-          wsClient.on("message:received", msgHandler);
-        }
-
-        // Send the initial command (don't wait for sendMessage to resolve — we're listening on the wsClient)
-        s.sendMessage(commandText, { ...messageOptions, waitForResponse: false })
-          .catch((err: any) => {
-            clearTimeout(flowTimeout);
-            cleanup();
-            reject(err);
-          });
-      });
-
-      return result;
-    }
-
-    // Standard single-response flow (non-TX commands)
-    // Listen on both SDK and wsClient for errors (backend sends errors via wsClient)
     try {
-    const response = await new Promise<any>((resolve, reject) => {
-      let settled = false;
-      const settle = (fn: Function, val: any) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        fn(val);
-      };
-
-      const isRelevantError = (msg: string) =>
-        msg.includes("Payment verification failed") ||
-        msg.includes("payment") ||
-        msg.includes("Agent not found") ||
-        msg.includes("not found") ||
-        msg.includes("insufficient");
-
-      // SDK-level error events
-      const sdkErrorHandler = (err: Error) => {
-        if (isRelevantError(err.message)) {
-          settle(reject, new Error(`Agent error: ${err.message}`));
-        }
-      };
-
-      // WebSocket-level error/message events (backend 402s come here)
-      const wsMessageHandler = (msg: any) => {
-        // Direct-agent mismatch guard
-        if (msg.type === "agent_selected") {
-          const selectedId = msg.data?.agent_id || msg.content?.agent_id || "";
-          if (selectedId && selectedId.toLowerCase() !== agent.toLowerCase()) {
-            settle(reject, new Error(`Direct-agent mismatch: expected "${agent}", coordinator selected "${selectedId}"`));
-            return;
-          }
-        }
-
-        if (msg.type === "error" && msg.data) {
-          const errMsg = msg.data.message || msg.content || "";
-          const errCode = msg.data.code || 0;
-          if (isRelevantError(errMsg) || errCode === 402) {
-            settle(reject, new Error(`Agent error (${errCode}): ${errMsg}`));
-          }
-        }
-      };
-
-      const cleanup = () => {
-        s.off("error", sdkErrorHandler);
-        if (wsClient) wsClient.off("message:received", wsMessageHandler);
-      };
-
-      s.on("error", sdkErrorHandler);
-      if (wsClient) wsClient.on("message:received", wsMessageHandler);
-
-      s.sendMessage(commandText, messageOptions)
-        .then((res: any) => settle(resolve, res))
-        .catch((err: any) => settle(reject, err));
-    });
-
-    if (response && (response.humanized || response.raw || response.content)) {
-      return {
-        humanized: response.humanized,
-        raw: response.raw,
-        content: response.content,
-        metadata: response.metadata,
-      };
-    }
-
-    return { status: "sent", note: "Command sent. Response may arrive asynchronously." };
+      return await runMultiStepTxFlow(s, {
+        agent,
+        commandLabel: cmd,
+        effectiveTimeout,
+        start: () => s.sendMessage(commandText, { ...messageOptions, waitForResponse: false }) as Promise<void>,
+      });
     } catch (cmdError: any) {
       // Payment network retry — if 402 and no explicit chain, try another funded network
       const is402 = cmdError.message?.includes("402") || cmdError.message?.includes("Payment verification failed") || cmdError.message?.includes("insufficient");
@@ -1149,17 +1211,21 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
           log(`Payment failed, retrying on ${nextChain} (balance: ${formatMicroUsdc(funded[0].balance)} USDC)`);
           const retryOptions = buildMessageOptions(nextChain);
 
-          const retryResponse = await s.sendMessage(commandText, retryOptions);
-          if (retryResponse && (retryResponse.humanized || retryResponse.raw || retryResponse.content)) {
+          const retryResponse = await runMultiStepTxFlow(s, {
+            agent,
+            commandLabel: cmd,
+            effectiveTimeout,
+            start: () => s.sendMessage(commandText, { ...retryOptions, waitForResponse: false }) as Promise<void>,
+          });
+
+          if (retryResponse && typeof retryResponse === "object") {
             return {
-              humanized: retryResponse.humanized,
-              raw: retryResponse.raw,
-              content: retryResponse.content,
-              metadata: retryResponse.metadata,
+              ...retryResponse,
               _payment_retry: { original_error: cmdError.message, retried_on: nextChain },
             };
           }
-          return { status: "sent", _payment_retry: { retried_on: nextChain } };
+
+          return retryResponse;
         }
       }
       throw cmdError;
@@ -1192,7 +1258,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
     if (!resolvedChain) {
       throw new Error("Unable to resolve quote chain. Set --chain to a valid network (base|avax|peaq|xlayer).");
     }
-    const q = await (s as any).requestQuote(message, room, resolvedChain);
+    const q = await s.requestQuote(message, room, resolvedChain);
     return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };
   },
 

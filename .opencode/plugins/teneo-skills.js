@@ -108,6 +108,7 @@ Use OpenCode's native \`skill\` tool to load a skill when triggered:
 - \`skill: teneo-agent-deployment\` — deploy Go agents on Teneo Protocol
 
 A wallet is auto-generated on first use. No manual key setup needed.
+After wallet init or detection, always show the user the active wallet address and tell them to use it for funding or ownership checks.
 Get started at: https://teneo-protocol.ai`
     );
 

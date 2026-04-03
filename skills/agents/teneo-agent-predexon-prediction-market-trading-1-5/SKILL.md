@@ -1,6 +1,6 @@
 ---
 name: predexon-prediction-market-trading-1-5-teneo
-version: 2.0.45
+version: 2.0.46
 description: "Predexon Prediction Market Trading 1.5 Universal proxy for trading on Polymarket and Predict.fun. Use this skill when the user needs Predexon Prediction Market Trading 1.5 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

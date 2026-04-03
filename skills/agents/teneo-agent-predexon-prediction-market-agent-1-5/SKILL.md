@@ -1,6 +1,6 @@
 ---
 name: predexon-prediction-market-agent-1-5-teneo
-version: 2.0.45
+version: 2.0.46
 description: "Predexon Agent — README Unified prediction market data API for Polymarket, Kalshi, Dflow, Binance, and cross-platform matching. Use this skill when the user needs Predexon Prediction Market Agent 1.5 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

@@ -486,7 +486,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.45")
+program.name("teneo-cli").version("2.0.46")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -1136,7 +1136,7 @@ async function ensureGo(): Promise<void> {
 }
 
 // Fetch latest Teneo Agent SDK version from GitHub, fallback to known version
-const SDK_FALLBACK_VERSION = "v0.8.0";
+const SDK_FALLBACK_VERSION = "v0.8.2";
 async function getLatestSDKVersion(): Promise<string> {
   try {
     const res = await fetch("https://api.github.com/repos/TeneoProtocolAI/teneo-agent-sdk/tags?per_page=1", {
