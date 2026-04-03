@@ -1,6 +1,6 @@
 ---
 name: teneo-cli
-version: 2.0.51
+version: 2.0.52
 description: "Teneo CLI — 39 commands for browse & query network agents, send commands to agents, room management, deploy & manage your own agents, wallet management, daemon & updates. Query network agents, handle x402 USDC micropayments, sign on-chain transactions, auto-generate encrypted wallets, deploy your own agents with background service management (launchd/systemd). Background daemon keeps a persistent WebSocket connection. Use this skill whenever the user needs real-time Teneo data, Teneo agent payments, or Teneo agent deployment."
 homepage: https://teneo-protocol.ai
 metadata: {"teneo":{"backend":"wss://backend.developer.chatroom.teneo-protocol.ai/ws","chains":["base:8453","peaq:3338","avalanche:43114","xlayer:196"],"payment":"x402-usdc"}}
@@ -78,6 +78,7 @@ When wallet context is first established, keep the user update short and practic
 10. This repo no longer ships a separate deployment skill. Use the `agent` workflow in this skill.
 11. For swaps, bridges, trades, sends, or any action that can move user funds, confirm intent explicitly before execution.
 12. Treat `wallet-export-key` as dangerous. Only run it on explicit user request.
+13. If a confirmed swap, bridge, trade, or send fails once, do not stop at a generic question. Diagnose it and retry once when safe.
 
 ## Install And Verify
 
@@ -268,11 +269,21 @@ Before paid or fund-moving commands:
 4. If balances are empty, stop and ask the user to fund that exact wallet.
 5. Confirm intent before swaps, bridges, trades, sends, or any command that can move funds.
 
-If payment fails:
+If payment or on-chain execution fails:
 
-1. Run `check-balance --json`.
-2. If all balances are empty, stop and ask the user to fund the wallet.
-3. If only one chain is funded, retry with `--chain <chain>`.
+1. Run `check-balance --json` immediately.
+2. Check the source-chain token balance and the source-chain native gas balance before guessing about slippage, liquidity, or routing.
+3. If all balances are empty, stop and ask the user to fund the wallet.
+4. If only one payment chain is funded, retry with `--chain <chain>`.
+5. If the user already confirmed the action and the failure looks transient or generic, retry the exact same command once after diagnostics. Do not stop with a vague "would you like me to..." before that first retry.
+6. If the wallet is missing funds, native gas is clearly too low, or the retry would require changing amount, chain, token pair, or route assumptions, stop and tell the user the concrete blocker instead of guessing.
+
+### Swap And Bridge Retry Policy
+
+- For a confirmed swap or bridge, the first failure is not the end of the workflow.
+- Diagnose first, then make one concrete retry when balances look sufficient and the retry does not change user intent.
+- Do not silently loop retries.
+- After one retry, report the exact blocker and the next concrete action.
 
 ## Agent Deployment
 
@@ -385,7 +396,7 @@ If daemon startup still fails, do not continue guessing. Inspect the actual erro
 - `room is full`: remove an agent or create a fresh room.
 - `insufficient funds`: run `check-balance --json` and fund the wallet.
 - `status: timeout`: do not assume failure immediately. Check follow-up state, balances, logs, or the transaction outcome before concluding it failed.
-- `execution revert` or a vague on-chain error: often means the wallet lacks native gas on the target chain.
+- `execution revert` or a vague on-chain error during a swap, bridge, or send: immediately run `check-balance --json`, verify source-chain native gas and token balances, and retry once if funds look sufficient. If native gas is missing or only dust remains, say that explicitly instead of defaulting to a vague slippage explanation.
 - silent failure or no response: check `daemon status` before guessing.
 - `Daemon failed to start`: stop the daemon, change `TENEO_DAEMON_PORT`, retry, then inspect logs.
 - `Room update timeout`: avoid `update-room` unless the user explicitly needs it.
@@ -1004,6 +1015,9 @@ Show installed and latest available version
 
 # X Platform Agent — Get the text content and basic information for any post. Sho
 ~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
+
+# Youtube — The command lets you search for videos. Examples: /search ca
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -1032,7 +1046,7 @@ Show installed and latest available version
 | [Uniswap Monitor](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-uniswap-monitor/SKILL.md) | 6 | AI-powered blockchain monitoring agent with real-time monitoring of Uniswap V2, ... |
 | [VC Attention](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-vc-attention/SKILL.md) | 2 | ## Overview The VC Attention Agent allows users to extract followings of top cry... |
 | [X Platform Agent](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-x-platform-agent/SKILL.md) | 10 | ## Overview The X Agent mpowers businesses, researchers, and marketers to move b... |
-| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 0 | - |
+| [Youtube](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-youtube/SKILL.md) | 2 | ## Overview The YouTube Agent allows users to extract data from YouTube to monit... |
 | [Aave V3 Liquidation Watcher](https://github.com/TeneoProtocolAI/teneo-skills/blob/main/skills/agents/teneo-agent-aave-v3-liquidation-watcher/SKILL.md) | 0 | - |
 
 <!-- /AGENTS_LIST -->

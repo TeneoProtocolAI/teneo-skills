@@ -60,6 +60,9 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 # X Platform Agent — Get the text content and basic information for any post. Sho
 ~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
+
+# Youtube — The command lets you search for videos. Examples: /search ca
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -93,7 +96,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.51 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.52 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...
@@ -123,6 +126,16 @@ Ask the user what they'd like to do:
 Based on their answer:
 - **Option 1 or 2:** Help them pick the right agent from the list above, then run `~/teneo-skill/teneo info <agentId>` to show exact commands and pricing.
 - **Option 3:** Use the `teneo-cli` skill and its `agent` commands to guide them through deployment.
+
+## Swap Failure Behavior
+
+If the user has already confirmed a swap, bridge, trade, or send and the first execution fails:
+
+- Do not stop with a generic question like "Would you like me to check requirements or try a different approach?"
+- Immediately run the Teneo wallet checks, inspect source-chain native gas and token balances, and diagnose the concrete blocker.
+- Retry the exact same command once when the failure looks transient and the retry does not change the user's intent.
+- Do not auto-retry when funds or native gas are clearly insufficient, or when retrying would require changing amount, route, chain, or token assumptions.
+- After one retry, tell the user the concrete blocker and the next action.
 
 ## How to Use Agents — The Core Workflow
 

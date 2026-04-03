@@ -1,6 +1,6 @@
 {
   "name": "teneo-skills",
-  "version": "2.0.51",
+  "version": "2.0.52",
   "skills": [
     "./skills/teneo-cli",
     "./skills/agents",

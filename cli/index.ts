@@ -496,7 +496,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.51")
+program.name("teneo-cli").version("2.0.52")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -1413,7 +1413,8 @@ agentCmd.command("create")
         type: opts.template || "enhanced",
         newKey: !!opts.newKey,
       });
-      const metaFile = `${result.dir}/${agentId}-metadata.json`;
+      const metaFileRelative = `${result.dir}/${agentId}-metadata.json`;
+      const metaFile = nodePath.resolve(metaFileRelative);
       const envLabel = result.keyMode === "cli_wallet"
         ? "CLI wallet key (default)"
         : "separate private key (--new-key)";
@@ -1437,16 +1438,16 @@ agentCmd.command("create")
         });
       } else {
         console.log(`\nCreated agent: ${agentId}\n`);
-        console.log(`  Agent file:   ${metaFile}`);
+        console.log(`  Agent file:   ${metaFileRelative}`);
         console.log(`  Edit it now:  define commands, capabilities, pricing, and descriptions`);
         console.log(``);
         console.log(`  Files:`);
-        console.log(`    ${metaFile}   <- commands, pricing, description`);
-        console.log(`    ${result.dir}/main.go${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/main.go`.length))}   <- your agent logic (ProcessTask)`);
-        console.log(`    ${result.dir}/.env${" ".repeat(Math.max(0, metaFile.length - `${result.dir}/.env`.length))}   <- ${envLabel}`);
+        console.log(`    ${metaFileRelative}   <- commands, pricing, description`);
+        console.log(`    ${result.dir}/main.go${" ".repeat(Math.max(0, metaFileRelative.length - `${result.dir}/main.go`.length))}   <- your agent logic (ProcessTask)`);
+        console.log(`    ${result.dir}/.env${" ".repeat(Math.max(0, metaFileRelative.length - `${result.dir}/.env`.length))}   <- ${envLabel}`);
         console.log(``);
         console.log(`  What to do now:`);
-        console.log(`  1. Edit ${metaFile}`);
+        console.log(`  1. Edit ${metaFileRelative}`);
         console.log(`     - Add your commands to the "commands" array (trigger, description, price)`);
         console.log(`     - Refine the "capabilities" array so the backend can classify your agent correctly`);
         console.log(`     - Update the description and short_description`);
@@ -1466,6 +1467,7 @@ agentCmd.command("create")
       }
     } else {
       const filename = `${agentId}-metadata.json`;
+      const agentFile = nodePath.resolve(filename);
       nodeFs.writeFileSync(filename, JSON.stringify(metadata, null, 2));
       if (JSON_FLAG) {
         out({
@@ -1473,9 +1475,9 @@ agentCmd.command("create")
           file: filename,
           agent_id: agentId,
           name,
-          agent_file: filename,
+          agent_file: agentFile,
           next_steps: [
-            `Edit ${filename} now to add commands, capabilities, pricing, description, and short_description`,
+            `Edit ${agentFile} now to add commands, capabilities, pricing, description, and short_description`,
             `Scaffold the Go project when ready: teneo agent create "${name}" --id ${agentId} --type ${agentType} --description "${description}" --short-description "${shortDescription}" --category "${categories[0]}"`,
             `After scaffolding, deploy it locally: teneo agent deploy ./${agentId}`,
             `After deploy, make it public: teneo agent publish ${agentId}`,
