@@ -11,7 +11,7 @@
  */
 
 import "dotenv/config";
-import { Command, Option } from "commander";
+import { Command } from "commander";
 import {
   createWalletClient,
   createPublicClient,
@@ -496,7 +496,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.48")
+program.name("teneo-cli").version("2.0.49")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -1167,7 +1167,7 @@ async function getLatestSDKVersion(): Promise<string> {
 
 async function scaffoldAgent(
   meta: any,
-  opts: { type: string; useCliKey?: boolean; newKey?: boolean }
+  opts: { type: string; newKey?: boolean }
 ): Promise<{ dir: string; agentId: string; files: string[]; keyMode: "cli_wallet" | "new_key" }> {
   await ensureGo();
 
@@ -1179,7 +1179,7 @@ async function scaffoldAgent(
 
   // Generate or reuse key
   let agentKey: string;
-  const useCliKey = opts.useCliKey ?? !opts.newKey;
+  const useCliKey = !opts.newKey;
   if (useCliKey) {
     agentKey = requireKey();
     console.error(JSON.stringify({ info: "Using CLI wallet key for agent." }));
@@ -1348,12 +1348,7 @@ agentCmd.command("create")
   .option("--category <cat>", "Category (can specify multiple)", (val: string, prev: string[]) => prev.concat(val), [] as string[])
   .option("--metadata-only", "Only create metadata JSON, skip Go project scaffolding")
   .option("--new-key", "Generate a separate private key for the agent instead of reusing the CLI wallet")
-  .addOption(new Option("--use-cli-key", "Reuse the CLI wallet key for the agent (default)").hideHelp())
   .action(async (name: string, opts: any) => {
-    if (opts.useCliKey && opts.newKey) {
-      fail("Choose only one of --use-cli-key or --new-key.");
-    }
-
     let agentId = opts.id;
     let agentType = opts.type || "command";
     let description = opts.description;
@@ -1416,7 +1411,6 @@ agentCmd.command("create")
     if (!metadataOnly) {
       const result = await scaffoldAgent(metadata, {
         type: opts.template || "enhanced",
-        useCliKey: opts.useCliKey ? true : undefined,
         newKey: !!opts.newKey,
       });
       const metaFile = `${result.dir}/${agentId}-metadata.json`;
