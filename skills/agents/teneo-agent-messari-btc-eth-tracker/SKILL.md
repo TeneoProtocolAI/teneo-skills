@@ -1,6 +1,6 @@
 ---
 name: messari-btc-eth-tracker-teneo
-version: 2.0.55
+version: 2.0.56
 description: "The Messari Tracker Agent serves as a direct bridge to Messari’s institutional-grade data sources, allowing users to extract BTC and ETH data without. Use this skill when the user needs Messari BTC & ETH Tracker via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

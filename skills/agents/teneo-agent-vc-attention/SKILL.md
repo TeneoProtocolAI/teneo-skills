@@ -1,6 +1,6 @@
 ---
 name: vc-attention-teneo
-version: 2.0.55
+version: 2.0.56
 description: "The VC Attention Agent allows users to extract followings of top crypto VCs, including lists from Dragonfly, Paradigm, a16z, and more, to bypass manual. Use this skill when the user needs VC Attention via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

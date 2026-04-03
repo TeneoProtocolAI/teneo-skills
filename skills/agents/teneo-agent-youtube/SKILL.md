@@ -1,6 +1,6 @@
 ---
 name: youtube-teneo
-version: 2.0.55
+version: 2.0.56
 description: "AI agent for Youtube via Teneo Protocol. Use this skill when the user needs Youtube via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
