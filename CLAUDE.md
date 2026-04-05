@@ -60,6 +60,9 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 # X Platform Agent — Get the text content and basic information for any post. Sho
 ~/teneo-skill/teneo command "x-agent-enterprise-v2" "post_content <ID_or_URL>" --room <roomId>
+
+# Youtube — The command lets you search for videos. Examples: /search ca
+~/teneo-skill/teneo command "youtube" "search <keyword> <sort_by>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -93,7 +96,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.56 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.57 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

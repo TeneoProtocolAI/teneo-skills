@@ -1,6 +1,6 @@
 ---
 name: predexon-prediction-market-trading-1-5-teneo
-version: 2.0.56
+version: 2.0.57
 description: "Predexon Prediction Market Trading 1.5 Universal proxy for trading on Polymarket and Predict.fun. Use this skill when the user needs Predexon Prediction Market Trading 1.5 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
@@ -349,7 +349,6 @@ First, ensure the CLI is installed (see the teneo-cli skill for setup — the fu
 | `get-positions` | <userId> | $0.001/per-query | List positions |
 | `redeem-position` | <userId> <redeem_json> | $0.001/per-query | Redeem position: <userId> <json> |
 | `withdraw-funds` | <userId> <withdraw_json> | $0.001/per-query | Withdraw: <userId> <json> |
-| `get-fee-policy` | - | $0.001/per-query | Review fee policy |
 
 ### Quick Reference
 
@@ -368,7 +367,6 @@ First, ensure the CLI is installed (see the teneo-cli skill for setup — the fu
 ~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "get-positions <userId>" --room <roomId>
 ~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "redeem-position <userId> <redeem_json>" --room <roomId>
 ~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "withdraw-funds <userId> <withdraw_json>" --room <roomId>
-~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "get-fee-policy" --room <roomId>
 ```
 
 ## Setup
@@ -522,16 +520,6 @@ Withdraw: <userId> <json>
 
 ```bash
 ~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "withdraw-funds <userId> <withdraw_json>" --room <roomId>
-```
-
-Response is JSON. Extract the `humanized` field for formatted text.
-
-### `get-fee-policy`
-
-Review fee policy
-
-```bash
-~/teneo-skill/teneo command "predexon-prediction-market-trading-v5" "get-fee-policy" --room <roomId>
 ```
 
 Response is JSON. Extract the `humanized` field for formatted text.

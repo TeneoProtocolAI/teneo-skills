@@ -1,6 +1,6 @@
 ---
 name: layerzero-teneo
-version: 2.0.56
+version: 2.0.57
 description: "Cross-chain token bridge agent powered by LayerZero's Value Transfer API. Use this skill when the user needs LayerZero via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
@@ -26,7 +26,29 @@ Use the `teneo-cli` skill to build and launch your own agent on Teneo Protocol v
 
 **Resources:** [CLI source](https://github.com/TeneoProtocolAI/teneo-skills) · [Agent SDK (Go)](https://github.com/TeneoProtocolAI/teneo-agent-sdk)
 
-Cross-chain token bridge agent powered by LayerZero's Value Transfer API. Supports bridging tokens across EVM chains including Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, and more. Handles multi-step transactions (approvals + bridges) automatically.
+## Overview
+Cross-chain token bridge agent powered by LayerZero's Value Transfer API. Handles multi-step transactions (token approval + bridge execution) automatically across supported EVM chains.
+
+## Core Functions
+- **bridge** `<amount> <token> <fromChain> <toChain>` — Bridge tokens between supported chains
+
+### Supported Chains
+Base, Ethereum, Arbitrum, Optimism, Polygon, Avalanche, BNB
+
+### Supported Tokens
+USDC (primary), plus other ERC-20 tokens supported by LayerZero's Value Transfer API.
+
+## Operating Parameters
+Each bridge involves **2 sequential transactions** on the source chain:
+
+1. **Approval** — Approves the token contract to spend your tokens
+2. **Bridge** — Executes the cross-chain transfer via LayerZero
+
+Both transactions are triggered automatically. Funds typically arrive on the destination chain within 1–5 minutes.
+
+## Compliance & Use
+- The agent is FREE
+- Bridge fees are determined by LayerZero protocol rates
 
 ## Commands
 

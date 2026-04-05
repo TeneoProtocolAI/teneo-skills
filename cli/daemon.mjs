@@ -118694,6 +118694,9 @@ function getSupportedPaymentChains() {
 var SUPPORTED_PAYMENT_CHAINS = getSupportedPaymentChains();
 var PAYMENT_NETWORK_PRIORITY = [...SUPPORTED_PAYMENT_CHAINS];
 var BALANCE_CHECK_TIMEOUT_MS = 4e3;
+var QUOTE_CACHE_TTL_MS = 3e4;
+var quoteCache = /* @__PURE__ */ new Map();
+var quoteCacheByTaskId = /* @__PURE__ */ new Map();
 var ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
 function formatSupportedPaymentChains() {
   return SUPPORTED_PAYMENT_CHAINS.join(", ");
@@ -118718,6 +118721,59 @@ function buildFundingInstruction(subject, chainName) {
 function buildPaymentFundingError(address, reason, chainName) {
   const normalizedReason = (reason || "Insufficient funds for Teneo payment").trim().replace(/\.\s*$/, "");
   return `${normalizedReason}. Active wallet: ${address}. Use this address for funding/ownership checks. ${buildFundingInstruction("this exact wallet", chainName)}`;
+}
+function buildQuoteCacheKey(message, room, resolvedChain) {
+  return JSON.stringify([message, room, resolvedChain]);
+}
+function invalidateCachedQuoteByKey(cacheKey2) {
+  const cached = quoteCache.get(cacheKey2);
+  if (!cached) return;
+  quoteCache.delete(cacheKey2);
+  quoteCacheByTaskId.delete(cached.taskId);
+}
+function invalidateCachedQuoteByTaskId(taskId) {
+  if (!taskId) return;
+  const cacheKey2 = quoteCacheByTaskId.get(taskId);
+  if (cacheKey2) {
+    quoteCacheByTaskId.delete(taskId);
+    quoteCache.delete(cacheKey2);
+  }
+}
+function cacheQuote(cacheKey2, quote) {
+  invalidateCachedQuoteByKey(cacheKey2);
+  const expiresAtMs = quote?.expiresAt instanceof Date ? quote.expiresAt.getTime() : typeof quote?.expiresAt === "string" ? new Date(quote.expiresAt).getTime() : Number.NaN;
+  const cachedUntilMs = Number.isFinite(expiresAtMs) ? Math.min(Date.now() + QUOTE_CACHE_TTL_MS, expiresAtMs) : Date.now() + QUOTE_CACHE_TTL_MS;
+  if (cachedUntilMs <= Date.now() || !quote?.taskId) return;
+  const entry = {
+    cacheKey: cacheKey2,
+    taskId: quote.taskId,
+    quote,
+    cachedUntilMs
+  };
+  quoteCache.set(cacheKey2, entry);
+  quoteCacheByTaskId.set(entry.taskId, cacheKey2);
+}
+function getPendingQuoteSafe(s2, taskId) {
+  try {
+    const getter = s2.getPendingQuote;
+    if (typeof getter === "function") return getter.call(s2, taskId);
+  } catch {
+    return null;
+  }
+  return null;
+}
+function getReusableCachedQuote(s2, cacheKey2) {
+  const cached = quoteCache.get(cacheKey2);
+  if (!cached) return null;
+  if (cached.cachedUntilMs <= Date.now()) {
+    invalidateCachedQuoteByKey(cacheKey2);
+    return null;
+  }
+  if (!getPendingQuoteSafe(s2, cached.taskId)) {
+    invalidateCachedQuoteByKey(cacheKey2);
+    return null;
+  }
+  return cached.quote;
 }
 async function fetchUsdcBalance(address, chainName) {
   const normalizedChain = normalizePaymentChainName(chainName);
@@ -119619,7 +119675,18 @@ var handlers = {
   },
   // Agent commands (with autosummon — uses sendMessage like the orchestrator)
   // Supports multi-step TX flows: agent sends approval TX, we sign it, agent sends swap TX, we sign it, agent sends final result.
-  "command": async (s2, { agent, cmd, room, chain, timeout }) => {
+  "command": async (s2, { agent, cmd, room, chain, timeout, quoteTaskId }) => {
+    const effectiveTimeout = timeout || 12e4;
+    if (quoteTaskId) {
+      invalidateCachedQuoteByTaskId(quoteTaskId);
+      return await runMultiStepTxFlow(s2, {
+        agent,
+        commandLabel: cmd,
+        effectiveTimeout,
+        initialTaskId: quoteTaskId,
+        start: () => s2.confirmQuote(quoteTaskId, { waitForResponse: false, timeout: effectiveTimeout })
+      });
+    }
     try {
       const roomAgents = await s2.listRoomAgents(room);
       const agentInRoom = roomAgents.some((a) => a.agent_id === agent);
@@ -119638,7 +119705,6 @@ var handlers = {
     } catch (checkErr) {
       log(`Autosummon check failed (non-fatal): ${checkErr.message}`);
     }
-    const effectiveTimeout = timeout || 12e4;
     const commandText = `@${agent} ${cmd}`;
     const explicitChain = chain || null;
     const attemptedNetworks = [];
@@ -119712,21 +119778,45 @@ var handlers = {
     const explicitChain = chain || null;
     let preflightChain = null;
     if (!explicitChain) {
-      const key = requireKey();
-      const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
-      const funded = await findFundedNetworks(account.address);
-      if (funded.length === 0) {
-        throw new Error(buildPaymentFundingError(account.address, "No funded payment networks found for quote"));
+      const defaultQuoteChain = PAYMENT_NETWORK_PRIORITY[0] || "base";
+      try {
+        const key = requireKey();
+        const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
+        const funded = await findFundedNetworks(account.address);
+        if (funded.length > 0) {
+          preflightChain = funded[0].chain;
+          log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
+        } else {
+          preflightChain = defaultQuoteChain;
+          log(`Preflight for quote: no funded payment networks found, defaulting quote network to ${preflightChain}`);
+        }
+      } catch (err) {
+        preflightChain = defaultQuoteChain;
+        log(`Preflight for quote failed, defaulting quote network to ${preflightChain}: ${err.message}`);
       }
-      preflightChain = funded[0].chain;
-      log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
     }
     const resolvedChain = explicitChain ? CHAIN_TO_CAIP2[explicitChain] || explicitChain : preflightChain ? CHAIN_TO_CAIP2[preflightChain] || preflightChain : void 0;
     if (!resolvedChain) {
       throw new Error(`Unable to resolve quote chain. Set --chain to a valid network (${formatSupportedPaymentChainsForFlag()}).`);
     }
+    const cacheKey2 = buildQuoteCacheKey(message, room, resolvedChain);
+    const cachedQuote = getReusableCachedQuote(s2, cacheKey2);
+    if (cachedQuote) {
+      log(`Quote cache hit for ${message} on ${resolvedChain}`);
+      return cachedQuote;
+    }
     const q = await s2.requestQuote(message, room, resolvedChain);
-    return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };
+    const result = {
+      taskId: q.taskId,
+      agentId: q.agentId,
+      agentName: q.agentName,
+      command: q.command,
+      pricing: q.pricing,
+      facilitatorFee: q.settlement?.facilitatorFee ?? null,
+      expiresAt: q.expiresAt
+    };
+    cacheQuote(cacheKey2, result);
+    return result;
   },
   // Payment utilities
   "check-balance": async (s2, { chain }) => {

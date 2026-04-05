@@ -92,6 +92,17 @@ const SUPPORTED_PAYMENT_CHAINS = getSupportedPaymentChains();
 // Payment network retry priority — try these in order when a payment fails on one chain
 const PAYMENT_NETWORK_PRIORITY = [...SUPPORTED_PAYMENT_CHAINS];
 const BALANCE_CHECK_TIMEOUT_MS = 4_000;
+const QUOTE_CACHE_TTL_MS = 30_000;
+
+interface CachedQuote {
+  cacheKey: string;
+  taskId: string;
+  quote: any;
+  cachedUntilMs: number;
+}
+
+const quoteCache = new Map<string, CachedQuote>();
+const quoteCacheByTaskId = new Map<string, string>();
 
 const ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }] as const;
 
@@ -126,6 +137,76 @@ function buildFundingInstruction(subject: string, chainName?: string): string {
 function buildPaymentFundingError(address: string, reason: string, chainName?: string): string {
   const normalizedReason = (reason || "Insufficient funds for Teneo payment").trim().replace(/\.\s*$/, "");
   return `${normalizedReason}. Active wallet: ${address}. Use this address for funding/ownership checks. ${buildFundingInstruction("this exact wallet", chainName)}`;
+}
+
+function buildQuoteCacheKey(message: string, room: string, resolvedChain: string): string {
+  return JSON.stringify([message, room, resolvedChain]);
+}
+
+function invalidateCachedQuoteByKey(cacheKey: string): void {
+  const cached = quoteCache.get(cacheKey);
+  if (!cached) return;
+  quoteCache.delete(cacheKey);
+  quoteCacheByTaskId.delete(cached.taskId);
+}
+
+function invalidateCachedQuoteByTaskId(taskId?: string | null): void {
+  if (!taskId) return;
+  const cacheKey = quoteCacheByTaskId.get(taskId);
+  if (cacheKey) {
+    quoteCacheByTaskId.delete(taskId);
+    quoteCache.delete(cacheKey);
+  }
+}
+
+function cacheQuote(cacheKey: string, quote: any): void {
+  invalidateCachedQuoteByKey(cacheKey);
+
+  const expiresAtMs = quote?.expiresAt instanceof Date
+    ? quote.expiresAt.getTime()
+    : typeof quote?.expiresAt === "string"
+      ? new Date(quote.expiresAt).getTime()
+      : Number.NaN;
+  const cachedUntilMs = Number.isFinite(expiresAtMs)
+    ? Math.min(Date.now() + QUOTE_CACHE_TTL_MS, expiresAtMs)
+    : Date.now() + QUOTE_CACHE_TTL_MS;
+  if (cachedUntilMs <= Date.now() || !quote?.taskId) return;
+
+  const entry: CachedQuote = {
+    cacheKey,
+    taskId: quote.taskId,
+    quote,
+    cachedUntilMs,
+  };
+  quoteCache.set(cacheKey, entry);
+  quoteCacheByTaskId.set(entry.taskId, cacheKey);
+}
+
+function getPendingQuoteSafe(s: TeneoSDK, taskId: string): any | null {
+  try {
+    const getter = (s as any).getPendingQuote;
+    if (typeof getter === "function") return getter.call(s, taskId);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function getReusableCachedQuote(s: TeneoSDK, cacheKey: string): any | null {
+  const cached = quoteCache.get(cacheKey);
+  if (!cached) return null;
+
+  if (cached.cachedUntilMs <= Date.now()) {
+    invalidateCachedQuoteByKey(cacheKey);
+    return null;
+  }
+
+  if (!getPendingQuoteSafe(s, cached.taskId)) {
+    invalidateCachedQuoteByKey(cacheKey);
+    return null;
+  }
+
+  return cached.quote;
 }
 
 async function fetchUsdcBalance(address: string, chainName: string): Promise<{ chain: string; balance: bigint | null; error: string | null }> {
@@ -1185,7 +1266,20 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
   // Agent commands (with autosummon — uses sendMessage like the orchestrator)
   // Supports multi-step TX flows: agent sends approval TX, we sign it, agent sends swap TX, we sign it, agent sends final result.
-  "command": async (s, { agent, cmd, room, chain, timeout }) => {
+  "command": async (s, { agent, cmd, room, chain, timeout, quoteTaskId }) => {
+    const effectiveTimeout = timeout || 120000;
+
+    if (quoteTaskId) {
+      invalidateCachedQuoteByTaskId(quoteTaskId);
+      return await runMultiStepTxFlow(s, {
+        agent,
+        commandLabel: cmd,
+        effectiveTimeout,
+        initialTaskId: quoteTaskId,
+        start: () => (s as any).confirmQuote(quoteTaskId, { waitForResponse: false, timeout: effectiveTimeout }) as Promise<void>,
+      });
+    }
+
     // Autosummon: check if agent is in room, try existing rooms first, create new as last resort
     try {
       const roomAgents = await s.listRoomAgents(room);
@@ -1207,7 +1301,6 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
       log(`Autosummon check failed (non-fatal): ${checkErr.message}`);
     }
 
-    const effectiveTimeout = timeout || 120000;
     const commandText = `@${agent} ${cmd}`;
     const explicitChain = chain || null; // null = auto-select via preflight balance check
     const attemptedNetworks: string[] = [];
@@ -1302,16 +1395,24 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
     const explicitChain = chain || null;
     let preflightChain: string | null = null;
 
-    // Preflight: if no explicit chain, pick the best funded network from wallet USDC balances
+    // Preflight: if no explicit chain, prefer the best funded network and fall back to the default payment network for quoting.
     if (!explicitChain) {
-      const key = requireKey();
-      const account = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`);
-      const funded = await findFundedNetworks(account.address);
-      if (funded.length === 0) {
-        throw new Error(buildPaymentFundingError(account.address, "No funded payment networks found for quote"));
+      const defaultQuoteChain = PAYMENT_NETWORK_PRIORITY[0] || "base";
+      try {
+        const key = requireKey();
+        const account = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`);
+        const funded = await findFundedNetworks(account.address);
+        if (funded.length > 0) {
+          preflightChain = funded[0].chain;
+          log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
+        } else {
+          preflightChain = defaultQuoteChain;
+          log(`Preflight for quote: no funded payment networks found, defaulting quote network to ${preflightChain}`);
+        }
+      } catch (err: any) {
+        preflightChain = defaultQuoteChain;
+        log(`Preflight for quote failed, defaulting quote network to ${preflightChain}: ${err.message}`);
       }
-      preflightChain = funded[0].chain;
-      log(`Preflight for quote: best funded network is ${preflightChain} (${formatMicroUsdc(funded[0].balance)} USDC)`);
     }
 
     const resolvedChain = explicitChain
@@ -1323,8 +1424,25 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
     if (!resolvedChain) {
       throw new Error(`Unable to resolve quote chain. Set --chain to a valid network (${formatSupportedPaymentChainsForFlag()}).`);
     }
+    const cacheKey = buildQuoteCacheKey(message, room, resolvedChain);
+    const cachedQuote = getReusableCachedQuote(s, cacheKey);
+    if (cachedQuote) {
+      log(`Quote cache hit for ${message} on ${resolvedChain}`);
+      return cachedQuote;
+    }
+
     const q = await s.requestQuote(message, room, resolvedChain);
-    return { taskId: q.taskId, agentId: q.agentId, agentName: q.agentName, command: q.command, pricing: q.pricing, expiresAt: q.expiresAt };
+    const result = {
+      taskId: q.taskId,
+      agentId: q.agentId,
+      agentName: q.agentName,
+      command: q.command,
+      pricing: q.pricing,
+      facilitatorFee: q.settlement?.facilitatorFee ?? null,
+      expiresAt: q.expiresAt,
+    };
+    cacheQuote(cacheKey, result);
+    return result;
   },
 
   // Payment utilities

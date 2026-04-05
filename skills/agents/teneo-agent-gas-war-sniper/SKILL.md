@@ -1,6 +1,6 @@
 ---
 name: gas-war-sniper-teneo
-version: 2.0.56
+version: 2.0.57
 description: "Real-time multi-chain gas monitoring and spike detection. Use this skill when the user needs Gas War Sniper via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

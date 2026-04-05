@@ -27,6 +27,7 @@ import * as nodeFs from "node:fs";
 import * as nodePath from "node:path";
 import * as nodeOs from "node:os";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -246,6 +247,7 @@ const ERC20_TRANSFER_EVENT = { type: "event", name: "Transfer", inputs: [{ name:
 // ─── Output Helpers ──────────────────────────────────────────────────────────
 
 const JSON_FLAG = process.argv.includes("--json");
+const PRICE_CONFIRM_THRESHOLD_MICRO_USDC = 1_500n; // 0.15 cents = 0.0015 USDC
 
 function out(data: unknown) { console.log(JSON.stringify(data, null, 2)); }
 
@@ -253,6 +255,70 @@ function fail(msg: string): never {
   if (JSON_FLAG) console.error(JSON.stringify({ error: msg }));
   else console.error(`Error: ${msg}`);
   process.exit(1);
+}
+
+function parseQuotedPriceMicroUsdc(value: unknown): bigint {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return BigInt(Math.round(value * 1_000_000));
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const trimmed = value.trim();
+    if (/^-?\d+$/.test(trimmed)) return BigInt(trimmed);
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return BigInt(Math.round(parsed * 1_000_000));
+  }
+  return 0n;
+}
+
+function formatMicroUsdc(microUsdc: bigint): string {
+  const sign = microUsdc < 0n ? "-" : "";
+  const abs = microUsdc < 0n ? -microUsdc : microUsdc;
+  const whole = abs / 1_000_000n;
+  const frac = (abs % 1_000_000n).toString().padStart(6, "0");
+  return `${sign}${whole}.${frac}`;
+}
+
+function getQuotedPriceBreakdown(quote: any): { basePrice: bigint; facilitatorFee: bigint; total: bigint; currency: string } {
+  const basePrice = parseQuotedPriceMicroUsdc(quote?.pricing?.pricePerUnit ?? quote?.pricing?.price_per_unit);
+  const facilitatorFee = parseQuotedPriceMicroUsdc(
+    quote?.facilitatorFee ??
+    quote?.facilitator_fee ??
+    quote?.settlement?.facilitatorFee ??
+    quote?.settlement?.facilitator_fee,
+  );
+  return {
+    basePrice,
+    facilitatorFee,
+    total: basePrice + facilitatorFee,
+    currency: quote?.pricing?.currency || "USDC",
+  };
+}
+
+async function confirmQuotedPrice(quote: any, commandText: string): Promise<void> {
+  const { basePrice, facilitatorFee, total, currency } = getQuotedPriceBreakdown(quote);
+  if (total <= PRICE_CONFIRM_THRESHOLD_MICRO_USDC) return;
+
+  const threshold = formatMicroUsdc(PRICE_CONFIRM_THRESHOLD_MICRO_USDC);
+  const totalFormatted = formatMicroUsdc(total);
+  const breakdown = facilitatorFee > 0n
+    ? ` (${formatMicroUsdc(basePrice)} base + ${formatMicroUsdc(facilitatorFee)} facilitator fee)`
+    : "";
+  const message = `Quoted payment for "${commandText}" is ${totalFormatted} ${currency}${breakdown}, above the confirmation threshold of ${threshold} ${currency}.`;
+
+  if (!process.stdin.isTTY) {
+    fail(`${message} Re-run with --ignore-price to execute without interactive confirmation.`);
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = (await rl.question(`${message} Execute? [y/N] `)).trim().toLowerCase();
+    if (answer !== "y" && answer !== "yes") {
+      fail("Command cancelled.");
+    }
+  } finally {
+    rl.close();
+  }
 }
 
 function normalizeDaemonError(error: string): string {
@@ -540,7 +606,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.56")
+program.name("teneo-cli").version("2.0.57")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
@@ -700,10 +766,23 @@ program.command("command")
   .option("--timeout <ms>", "Response timeout", "120000")
   .option("--chain <chain>", `Payment chain (${formatSupportedWalletChainsForFlag()})`)
   .option("--network <network>", "Payment network (alias for --chain)")
+  .option("--ignore-price", "Execute without the pre-execution price confirmation gate")
   .action(async (agent: string, cmd: string, opts: any) => {
     const room = await resolveRoom(opts.room);
     const chain = opts.chain || opts.network;
-    out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout) }));
+    const timeout = parseInt(opts.timeout, 10);
+    const commandText = `@${agent} ${cmd}`;
+    let quoteTaskId: string | undefined;
+
+    if (!opts.ignorePrice) {
+      const quote = await execViaDaemon("quote", { message: commandText, room, chain });
+      await confirmQuotedPrice(quote, commandText);
+      if (typeof quote?.taskId === "string" && quote.taskId) {
+        quoteTaskId = quote.taskId;
+      }
+    }
+
+    out(await execViaDaemon("command", { agent, cmd, room, chain, timeout, quoteTaskId }));
   });
 
 program.command("quote")

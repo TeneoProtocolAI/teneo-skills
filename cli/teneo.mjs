@@ -43414,6 +43414,7 @@ import * as nodeFs from "node:fs";
 import * as nodePath from "node:path";
 import * as nodeOs from "node:os";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 var PRIVATE_KEY = process.env.TENEO_PRIVATE_KEY;
 var DEFAULT_ROOM = process.env.TENEO_DEFAULT_ROOM || "";
@@ -43590,6 +43591,7 @@ function formatSupportedWalletChainsForFlag() {
 var ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
 var ERC20_TRANSFER_ABI = [{ inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }], name: "transfer", outputs: [{ name: "", type: "bool" }], stateMutability: "nonpayable", type: "function" }];
 var JSON_FLAG = process.argv.includes("--json");
+var PRICE_CONFIRM_THRESHOLD_MICRO_USDC = 1500n;
 function out(data) {
   console.log(JSON.stringify(data, null, 2));
 }
@@ -43597,6 +43599,58 @@ function fail(msg) {
   if (JSON_FLAG) console.error(JSON.stringify({ error: msg }));
   else console.error(`Error: ${msg}`);
   process.exit(1);
+}
+function parseQuotedPriceMicroUsdc(value) {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return BigInt(Math.round(value * 1e6));
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const trimmed = value.trim();
+    if (/^-?\d+$/.test(trimmed)) return BigInt(trimmed);
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return BigInt(Math.round(parsed * 1e6));
+  }
+  return 0n;
+}
+function formatMicroUsdc(microUsdc) {
+  const sign2 = microUsdc < 0n ? "-" : "";
+  const abs = microUsdc < 0n ? -microUsdc : microUsdc;
+  const whole = abs / 1000000n;
+  const frac = (abs % 1000000n).toString().padStart(6, "0");
+  return `${sign2}${whole}.${frac}`;
+}
+function getQuotedPriceBreakdown(quote) {
+  const basePrice = parseQuotedPriceMicroUsdc(quote?.pricing?.pricePerUnit ?? quote?.pricing?.price_per_unit);
+  const facilitatorFee = parseQuotedPriceMicroUsdc(
+    quote?.facilitatorFee ?? quote?.facilitator_fee ?? quote?.settlement?.facilitatorFee ?? quote?.settlement?.facilitator_fee
+  );
+  return {
+    basePrice,
+    facilitatorFee,
+    total: basePrice + facilitatorFee,
+    currency: quote?.pricing?.currency || "USDC"
+  };
+}
+async function confirmQuotedPrice(quote, commandText) {
+  const { basePrice, facilitatorFee, total, currency } = getQuotedPriceBreakdown(quote);
+  if (total <= PRICE_CONFIRM_THRESHOLD_MICRO_USDC) return;
+  const threshold = formatMicroUsdc(PRICE_CONFIRM_THRESHOLD_MICRO_USDC);
+  const totalFormatted = formatMicroUsdc(total);
+  const breakdown = facilitatorFee > 0n ? ` (${formatMicroUsdc(basePrice)} base + ${formatMicroUsdc(facilitatorFee)} facilitator fee)` : "";
+  const message = `Quoted payment for "${commandText}" is ${totalFormatted} ${currency}${breakdown}, above the confirmation threshold of ${threshold} ${currency}.`;
+  if (!process.stdin.isTTY) {
+    fail(`${message} Re-run with --ignore-price to execute without interactive confirmation.`);
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = (await rl.question(`${message} Execute? [y/N] `)).trim().toLowerCase();
+    if (answer !== "y" && answer !== "yes") {
+      fail("Command cancelled.");
+    }
+  } finally {
+    rl.close();
+  }
 }
 function normalizeDaemonError(error) {
   if (error.includes("Not connected to Teneo network")) {
@@ -43834,7 +43888,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program2 = new Command();
-program2.name("teneo-cli").version("2.0.56").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program2.name("teneo-cli").version("2.0.57").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
   program2.addHelpText("afterAll", `
 ${GREETING_INSTALL_TEXT}
@@ -43970,10 +44024,20 @@ program2.command("info").alias("agent-details").description("Show details, comma
   console.log(`    teneo-cli command ${agent.agent_id} "${agent.commands?.[0]?.trigger || "help"}" --room <roomId>
 `);
 });
-program2.command("command").description("Send a command to a network agent and get a response").argument("<agent>", "Internal agent ID (e.g. x-agent-enterprise-v2)").argument("<cmd>", "Command string: {trigger} {argument}").option("--room <roomId>").option("--timeout <ms>", "Response timeout", "120000").option("--chain <chain>", `Payment chain (${formatSupportedWalletChainsForFlag()})`).option("--network <network>", "Payment network (alias for --chain)").action(async (agent, cmd, opts) => {
+program2.command("command").description("Send a command to a network agent and get a response").argument("<agent>", "Internal agent ID (e.g. x-agent-enterprise-v2)").argument("<cmd>", "Command string: {trigger} {argument}").option("--room <roomId>").option("--timeout <ms>", "Response timeout", "120000").option("--chain <chain>", `Payment chain (${formatSupportedWalletChainsForFlag()})`).option("--network <network>", "Payment network (alias for --chain)").option("--ignore-price", "Execute without the pre-execution price confirmation gate").action(async (agent, cmd, opts) => {
   const room = await resolveRoom(opts.room);
   const chain = opts.chain || opts.network;
-  out(await execViaDaemon("command", { agent, cmd, room, chain, timeout: parseInt(opts.timeout) }));
+  const timeout = parseInt(opts.timeout, 10);
+  const commandText = `@${agent} ${cmd}`;
+  let quoteTaskId;
+  if (!opts.ignorePrice) {
+    const quote = await execViaDaemon("quote", { message: commandText, room, chain });
+    await confirmQuotedPrice(quote, commandText);
+    if (typeof quote?.taskId === "string" && quote.taskId) {
+      quoteTaskId = quote.taskId;
+    }
+  }
+  out(await execViaDaemon("command", { agent, cmd, room, chain, timeout, quoteTaskId }));
 });
 program2.command("quote").description("Check price for a command (does not execute)").argument("<message>").option("--room <roomId>").option("--chain <chain>", `Payment chain (${formatSupportedWalletChainsForFlag()})`).option("--network <network>", "Payment network (alias for --chain)").action(async (message, opts) => {
   const room = await resolveRoom(opts.room);
