@@ -451,6 +451,7 @@ function buildSDK(key: string): TeneoSDK {
   const builder = new SDKConfigBuilder()
     .withWebSocketUrl(WS_URL)
     .withAuthentication(normalizedKey)
+    .withRequestSource("cli")
     .withReconnection({ enabled: true, delay: 3000, maxAttempts: 5 })
     .withCache(true, 600000, 500)
     .withPayments({
