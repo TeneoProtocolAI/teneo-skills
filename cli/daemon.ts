@@ -451,7 +451,6 @@ function buildSDK(key: string): TeneoSDK {
   const builder = new SDKConfigBuilder()
     .withWebSocketUrl(WS_URL)
     .withAuthentication(normalizedKey)
-    .withRequestSource("cli")
     .withReconnection({ enabled: true, delay: 3000, maxAttempts: 5 })
     .withCache(true, 600000, 500)
     .withPayments({
@@ -463,6 +462,11 @@ function buildSDK(key: string): TeneoSDK {
   const config = builder.build();
   config.messageTimeout = 120000;
   config.responseFormat = "both";
+  config.webhookHeaders = {
+    ...(config.webhookHeaders ?? {}),
+    "User-Agent": "teneo-cli/1.0"
+  };
+  (config as typeof config & { requestSource?: string }).requestSource = "cli";
   return new TeneoSDK(config);
 }
 
