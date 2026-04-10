@@ -43888,7 +43888,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program2 = new Command();
-program2.name("teneo-cli").version("2.0.57").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program2.name("teneo-cli").version("2.0.59").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
   program2.addHelpText("afterAll", `
 ${GREETING_INSTALL_TEXT}

@@ -118976,6 +118976,11 @@ function buildSDK(key) {
   const config = builder.build();
   config.messageTimeout = 12e4;
   config.responseFormat = "both";
+  config.webhookHeaders = {
+    ...config.webhookHeaders ?? {},
+    "User-Agent": "teneo-cli/1.0"
+  };
+  config.requestSource = "cli";
   return new import_sdk.TeneoSDK(config);
 }
 var CHAIN_NAMES = {
@@ -119027,25 +119032,10 @@ async function signBroadcastAndConfirm(sdkInstance, account, taskId, tx, room) {
   if (receipt.reverted) {
     log(`TX reverted on-chain: ${txHash}`);
     await sdkInstance.sendTxResult(taskId, "failed", formattedHash, "Transaction reverted on-chain", room, tx.chainId);
-    sdkInstance.emit("wallet:tx_completed", {
-      taskId,
-      status: "failed",
-      txHash: formattedHash,
-      error: "Transaction reverted on-chain",
-      room,
-      chainId: tx.chainId
-    });
     return { txHash, status: "failed", error: "Transaction reverted on-chain" };
   }
   log(`TX confirmed: ${txHash}`);
   await sdkInstance.sendTxResult(taskId, "confirmed", formattedHash, void 0, room, tx.chainId);
-  sdkInstance.emit("wallet:tx_completed", {
-    taskId,
-    status: "confirmed",
-    txHash: formattedHash,
-    room,
-    chainId: tx.chainId
-  });
   return { txHash, status: "confirmed" };
 }
 async function runMultiStepTxFlow(s2, {
@@ -119058,6 +119048,7 @@ async function runMultiStepTxFlow(s2, {
   log(`Tracking command flow for "${commandLabel}"`);
   const agentLower = agent.toLowerCase();
   const messages = [];
+  const streamChunks = [];
   let txCount = 0;
   let activeTaskId = initialTaskId || null;
   let taskConfirmedSeen = !!initialTaskId;
@@ -119071,10 +119062,18 @@ async function runMultiStepTxFlow(s2, {
       fn(value);
     };
     const recordTaskId = (taskId) => {
-      if (!taskId || taskId.startsWith("msg-") || activeTaskId) return;
-      activeTaskId = taskId;
-      taskConfirmedSeen = true;
-      log(`Tracking multi-step task ${taskId} for ${agent}`);
+      if (!taskId || taskId.startsWith("msg-")) return;
+      if (!activeTaskId) {
+        activeTaskId = taskId;
+        taskConfirmedSeen = true;
+        log(`Tracking multi-step task ${taskId} for ${agent}`);
+        return;
+      }
+      if (activeTaskId !== taskId && initialTaskId && activeTaskId === initialTaskId) {
+        activeTaskId = taskId;
+        taskConfirmedSeen = true;
+        log(`Switched multi-step tracking from initial task ${initialTaskId} to follow-up task ${taskId} for ${agent}`);
+      }
     };
     const matchesAgent = (value) => !!value && value.toLowerCase() === agentLower;
     const matchesTask = (taskId) => !!activeTaskId && !!taskId && taskId === activeTaskId;
@@ -119082,12 +119081,17 @@ async function runMultiStepTxFlow(s2, {
     const isSyntheticTaskId = (taskId) => !!taskId && taskId.startsWith("msg-");
     const shouldTrackTxEvent = (data) => {
       if (matchesTask(data.taskId) || matchesInitialTask(data.taskId)) return true;
-      if (initialTaskId && data.taskId && data.taskId !== initialTaskId) return false;
+      if (initialTaskId && data.taskId && data.taskId !== initialTaskId) {
+        return matchesAgent(data.agentName);
+      }
       return !activeTaskId && matchesAgent(data.agentName);
     };
     const shouldTrackAgentResponse = (response) => {
       if (matchesTask(response.taskId) || matchesInitialTask(response.taskId)) return true;
       if (isSyntheticTaskId(response.taskId)) {
+        return matchesAgent(response.agentId) || matchesAgent(response.agentName);
+      }
+      if (initialTaskId && response.taskId && response.taskId !== initialTaskId) {
         return matchesAgent(response.agentId) || matchesAgent(response.agentName);
       }
       if (activeTaskId) return false;
@@ -119103,7 +119107,8 @@ async function runMultiStepTxFlow(s2, {
       steps: messages,
       txCount,
       taskId: activeTaskId || initialTaskId || taskId || void 0,
-      status
+      status,
+      ...streamChunks.length > 0 ? { chunks: streamChunks } : {}
     });
     const scheduleTaskFlowResolve = (status, taskId, delayMs = 5e3) => {
       clearFinalizeTimer();
@@ -119118,7 +119123,8 @@ async function runMultiStepTxFlow(s2, {
           humanized: response.humanized,
           raw: response.raw,
           content: response.content,
-          metadata: response.metadata
+          metadata: response.metadata,
+          ...streamChunks.length > 0 ? { chunks: streamChunks } : {}
         });
       }, delayMs);
     };
@@ -119205,6 +119211,25 @@ async function runMultiStepTxFlow(s2, {
       });
       resetIdleTimer(`TX result: ${data.status}`);
     };
+    const agentChunkHandler = (data) => {
+      const taskMatches = matchesTask(data.taskId) || matchesInitialTask(data.taskId);
+      const agentMatches = matchesAgent(data.agentId) || matchesAgent(data.agentName);
+      if (!taskMatches && !(agentMatches && !activeTaskId)) return;
+      recordTaskId(data.taskId);
+      streamChunks.push({
+        taskId: data.taskId,
+        seq: typeof data.seq === "number" ? data.seq : streamChunks.length,
+        content: data.content || "",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      resetIdleTimer(`stream chunk ${data.seq}`);
+    };
+    const agentStreamEndHandler = (data) => {
+      if (!matchesTask(data.taskId) && !matchesInitialTask(data.taskId) && !(matchesAgent(data.agentId) || matchesAgent(data.agentName))) {
+        return;
+      }
+      log(`Stream ended for ${agent}: ${streamChunks.length} chunks, ${(data.assembledContent || "").length} chars`);
+    };
     const agentResponseHandler = (response) => {
       if (!shouldTrackAgentResponse(response)) return;
       clearFinalizeTimer();
@@ -119258,6 +119283,8 @@ async function runMultiStepTxFlow(s2, {
       s2.off("task:confirmed", taskConfirmedHandler);
       s2.off("wallet:tx_requested", txHandler);
       s2.off("wallet:tx_completed", txResultHandler);
+      s2.off("agent:chunk", agentChunkHandler);
+      s2.off("agent:stream_end", agentStreamEndHandler);
       s2.off("agent:response", agentResponseHandler);
       s2.off("agent:error", agentErrorHandler);
     };
@@ -119266,6 +119293,8 @@ async function runMultiStepTxFlow(s2, {
     s2.on("task:confirmed", taskConfirmedHandler);
     s2.on("wallet:tx_requested", txHandler);
     s2.on("wallet:tx_completed", txResultHandler);
+    s2.on("agent:chunk", agentChunkHandler);
+    s2.on("agent:stream_end", agentStreamEndHandler);
     s2.on("agent:response", agentResponseHandler);
     s2.on("agent:error", agentErrorHandler);
     resetIdleTimer("flow start");
@@ -119284,13 +119313,6 @@ function registerTxSigner(sdkInstance) {
     } catch (err) {
       log(`TX failed: ${err.message}`);
       await sdkInstance.sendTxResult(taskId, "failed", void 0, err.message, room, tx.chainId);
-      sdkInstance.emit("wallet:tx_completed", {
-        taskId,
-        status: "failed",
-        error: err.message,
-        room,
-        chainId: tx.chainId
-      });
     }
   });
 }
@@ -119406,7 +119428,7 @@ function normalizeAgent(a) {
     })
   };
 }
-async function fetchAgentsViaSDK(s2) {
+async function fetchAgentsViaSDK(s2, includeDetails = false) {
   const rooms = await liveRooms(s2);
   if (rooms.length === 0) return [];
   const room = rooms[0];
@@ -119416,7 +119438,7 @@ async function fetchAgentsViaSDK(s2) {
   const limit = 50;
   let result;
   do {
-    result = await s2.listAvailableAgents(room.id, { limit, offset });
+    result = await s2.listAvailableAgents(room.id, { limit, offset, includeDetails });
     available.push(...result.agents);
     offset += limit;
   } while (result.hasMore);
@@ -119425,82 +119447,36 @@ async function fetchAgentsViaSDK(s2) {
 async function sleep(ms) {
   return new Promise((r2) => setTimeout(r2, ms));
 }
-async function getAgentDetailsLive(s2, agentId, timeoutMs = 1e4) {
+async function getAgentDetailsLive(s2, agentId) {
   try {
-    const wsClient = s2.wsClient;
-    if (!wsClient?.isConnected) return null;
-    return await new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        wsClient.off("message:received", handler);
-        resolve(null);
-      }, timeoutMs);
-      const handler = (msg) => {
-        if (msg.type === "agent_details_response" && msg.data?.agent) {
-          const agent = msg.data.agent;
-          if (agent.agent_id === agentId) {
-            clearTimeout(timeout);
-            wsClient.off("message:received", handler);
-            resolve(agent);
-          }
-        }
-      };
-      wsClient.on("message:received", handler);
-      wsClient.sendMessage({ type: "get_agent_details", data: { agent_id: agentId } });
-    });
+    return await s2.getAgentDetails(agentId);
   } catch {
     return null;
   }
 }
 async function enrichAgentsWithDetails(s2, agents) {
-  const wsClient = s2.wsClient;
-  if (!wsClient?.isConnected || agents.length === 0) return agents;
-  const pending = /* @__PURE__ */ new Map();
+  if (agents.length === 0) return agents;
+  const promises = agents.map(
+    (agent, i2) => sleep(i2 * 200).then(
+      () => s2.getAgentDetails(agent.agent_id).then((details) => ({ agentId: agent.agent_id, details })).catch(() => ({ agentId: agent.agent_id, details: null }))
+    )
+  );
+  const settled = await Promise.all(promises);
   const results = /* @__PURE__ */ new Map();
-  for (const agent of agents) {
-    pending.set(agent.agent_id, agent);
-  }
-  return new Promise((resolve) => {
-    const totalTimeout = Math.min(agents.length * 200 + 1e4, 6e4);
-    const timer = setTimeout(() => {
-      wsClient.off("message:received", handler);
-      finalize();
-    }, totalTimeout);
-    const handler = (msg) => {
-      if (msg.type === "agent_details_response" && msg.data?.agent) {
-        const agent = msg.data.agent;
-        if (pending.has(agent.agent_id)) {
-          results.set(agent.agent_id, { ...normalizeAgent(agent), _source: "live" });
-          pending.delete(agent.agent_id);
-          if (pending.size === 0) {
-            clearTimeout(timer);
-            wsClient.off("message:received", handler);
-            finalize();
-          }
-        }
-      }
-    };
-    function finalize() {
-      const merged = agents.map(
-        (a) => results.get(a.agent_id) || { ...a, _source: "cached" }
-      );
-      resolve(merged);
+  for (const { agentId, details } of settled) {
+    if (details) {
+      results.set(agentId, { ...normalizeAgent(details), _source: "live" });
     }
-    wsClient.on("message:received", handler);
-    (async () => {
-      for (const agent of agents) {
-        wsClient.sendMessage({ type: "get_agent_details", data: { agent_id: agent.agent_id } }).catch(() => {
-        });
-        await sleep(200);
-      }
-    })();
-  });
+  }
+  return agents.map(
+    (a) => results.get(a.agent_id) || { ...a, _source: "cached" }
+  );
 }
 var handlers = {
   // Discovery (via SDK WebSocket — no REST)
   "discover": async (s2) => {
-    const rawAgents = await fetchAgentsViaSDK(s2);
-    const normalized = rawAgents.map(normalizeAgent);
-    const enriched = await enrichAgentsWithDetails(s2, normalized);
+    const rawAgents = await fetchAgentsViaSDK(s2, true);
+    const enriched = rawAgents.map(normalizeAgent);
     const onlineAgents = enriched.filter((a) => a.is_online);
     const commandIndex = [];
     for (const agent of onlineAgents) {
@@ -119553,7 +119529,7 @@ var handlers = {
     };
   },
   "list-agents": async (s2, args) => {
-    let agents = (await fetchAgentsViaSDK(s2)).map(normalizeAgent);
+    let agents = (await fetchAgentsViaSDK(s2, true)).map(normalizeAgent);
     try {
       const networkIds = new Set(agents.map((a) => a.agent_id));
       const skillDirs = [
@@ -119601,8 +119577,7 @@ var handlers = {
     }
     if (args?.online) agents = agents.filter((a) => a.is_online);
     if (args?.free) agents = agents.filter((a) => a.commands.some((c) => c.is_free));
-    const enriched = await enrichAgentsWithDetails(s2, agents);
-    return { count: enriched.length, agents: enriched };
+    return { count: agents.length, agents };
   },
   "info": async (s2, { agentId }) => {
     const details = await getAgentDetailsLive(s2, agentId);
@@ -119854,10 +119829,9 @@ var handlers = {
   },
   // Agent deployment — filter agents by creator wallet
   "my-agents": async (s2, { walletAddress }) => {
-    const rawAgents = await fetchAgentsViaSDK(s2);
+    const rawAgents = await fetchAgentsViaSDK(s2, true);
     const all = rawAgents.map(normalizeAgent);
-    const enriched = await enrichAgentsWithDetails(s2, all);
-    const owned = walletAddress ? enriched.filter((a) => a.creator_wallet?.toLowerCase() === walletAddress.toLowerCase() || a.owner?.toLowerCase() === walletAddress.toLowerCase()) : enriched;
+    const owned = walletAddress ? all.filter((a) => a.owner?.toLowerCase() === walletAddress.toLowerCase() || a.creator_wallet?.toLowerCase() === walletAddress.toLowerCase()) : all;
     return { count: owned.length, agents: owned, wallet: walletAddress };
   },
   "my-agent-status": async (s2, { agentId, walletAddress }) => {

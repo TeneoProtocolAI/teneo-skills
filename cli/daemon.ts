@@ -446,6 +446,13 @@ function clearConnectionError() {
   lastConnectionErrorName = null;
 }
 
+// Streaming agent responses:
+// - `agent:response` is emitted by the SDK with the fully assembled content on `final: true`.
+//   sendMessage with waitForResponse resolves with the assembled content transparently.
+// - `agent:chunk` / `agent:stream_end` events are tracked in runMultiStepTxFlow's `streamChunks`
+//   array and included in the flow result as `chunks`, so consumers can display tokens
+//   incrementally or post-process the stream.
+// - For real-time CLI display, the /exec endpoint could switch to SSE (future enhancement).
 function buildSDK(key: string): TeneoSDK {
   const normalizedKey = key.startsWith("0x") ? key : `0x${key}`;
   const builder = new SDKConfigBuilder()
@@ -541,26 +548,11 @@ async function signBroadcastAndConfirm(
   if (receipt.reverted) {
     log(`TX reverted on-chain: ${txHash}`);
     await (sdkInstance as any).sendTxResult(taskId, "failed", formattedHash, "Transaction reverted on-chain", room, tx.chainId);
-    (sdkInstance as any).emit("wallet:tx_completed", {
-      taskId,
-      status: "failed",
-      txHash: formattedHash,
-      error: "Transaction reverted on-chain",
-      room,
-      chainId: tx.chainId,
-    });
     return { txHash, status: "failed", error: "Transaction reverted on-chain" };
   }
 
   log(`TX confirmed: ${txHash}`);
   await (sdkInstance as any).sendTxResult(taskId, "confirmed", formattedHash, undefined, room, tx.chainId);
-  (sdkInstance as any).emit("wallet:tx_completed", {
-    taskId,
-    status: "confirmed",
-    txHash: formattedHash,
-    room,
-    chainId: tx.chainId,
-  });
   return { txHash, status: "confirmed" };
 }
 
@@ -584,6 +576,7 @@ async function runMultiStepTxFlow(
 
   const agentLower = agent.toLowerCase();
   const messages: any[] = [];
+  const streamChunks: Array<{ taskId: string; seq: number; content: string; timestamp: string }> = [];
   let txCount = 0;
   let activeTaskId = initialTaskId || null;
   let taskConfirmedSeen = !!initialTaskId;
@@ -652,6 +645,7 @@ async function runMultiStepTxFlow(
       txCount,
       taskId: activeTaskId || initialTaskId || taskId || undefined,
       status,
+      ...(streamChunks.length > 0 ? { chunks: streamChunks } : {}),
     });
 
     const scheduleTaskFlowResolve = (status: "completed" | "error", taskId?: string, delayMs: number = 5000) => {
@@ -669,6 +663,7 @@ async function runMultiStepTxFlow(
           raw: response.raw,
           content: response.content,
           metadata: response.metadata,
+          ...(streamChunks.length > 0 ? { chunks: streamChunks } : {}),
         });
       }, delayMs);
     };
@@ -763,6 +758,33 @@ async function runMultiStepTxFlow(
       resetIdleTimer(`TX result: ${data.status}`);
     };
 
+    const agentChunkHandler = (data: any) => {
+      // Filter chunks to those matching this flow's task/agent
+      const taskMatches = matchesTask(data.taskId) || matchesInitialTask(data.taskId);
+      const agentMatches = matchesAgent(data.agentId) || matchesAgent(data.agentName);
+      if (!taskMatches && !(agentMatches && !activeTaskId)) return;
+
+      recordTaskId(data.taskId);
+      streamChunks.push({
+        taskId: data.taskId,
+        seq: typeof data.seq === "number" ? data.seq : streamChunks.length,
+        content: data.content || "",
+        timestamp: new Date().toISOString(),
+      });
+      // Chunks keep the flow alive — reset idle timer
+      resetIdleTimer(`stream chunk ${data.seq}`);
+    };
+
+    const agentStreamEndHandler = (data: any) => {
+      // agent:stream_end fires before agent:response (which is emitted with assembled content).
+      // We don't resolve here — let agentResponseHandler handle finalization as usual.
+      if (!matchesTask(data.taskId) && !matchesInitialTask(data.taskId) &&
+          !(matchesAgent(data.agentId) || matchesAgent(data.agentName))) {
+        return;
+      }
+      log(`Stream ended for ${agent}: ${streamChunks.length} chunks, ${(data.assembledContent || "").length} chars`);
+    };
+
     const agentResponseHandler = (response: any) => {
       if (!shouldTrackAgentResponse(response)) return;
       clearFinalizeTimer();
@@ -831,6 +853,8 @@ async function runMultiStepTxFlow(
       s.off("task:confirmed", taskConfirmedHandler);
       s.off("wallet:tx_requested", txHandler);
       s.off("wallet:tx_completed", txResultHandler);
+      s.off("agent:chunk" as any, agentChunkHandler);
+      s.off("agent:stream_end" as any, agentStreamEndHandler);
       s.off("agent:response", agentResponseHandler);
       s.off("agent:error", agentErrorHandler);
     };
@@ -840,6 +864,8 @@ async function runMultiStepTxFlow(
     s.on("task:confirmed", taskConfirmedHandler);
     s.on("wallet:tx_requested", txHandler);
     s.on("wallet:tx_completed", txResultHandler);
+    s.on("agent:chunk" as any, agentChunkHandler);
+    s.on("agent:stream_end" as any, agentStreamEndHandler);
     s.on("agent:response", agentResponseHandler);
     s.on("agent:error", agentErrorHandler);
 
@@ -864,13 +890,6 @@ function registerTxSigner(sdkInstance: TeneoSDK) {
     } catch (err: any) {
       log(`TX failed: ${err.message}`);
       await (sdkInstance as any).sendTxResult(taskId, "failed", undefined, err.message, room, tx.chainId);
-      (sdkInstance as any).emit("wallet:tx_completed", {
-        taskId,
-        status: "failed",
-        error: err.message,
-        room,
-        chainId: tx.chainId,
-      });
     }
   });
 }
@@ -994,7 +1013,7 @@ function normalizeAgent(a: any) {
   };
 }
 
-async function fetchAgentsViaSDK(s: TeneoSDK): Promise<any[]> {
+async function fetchAgentsViaSDK(s: TeneoSDK, includeDetails = false): Promise<any[]> {
   const rooms = await liveRooms(s);
   if (rooms.length === 0) return [];
   const room = rooms[0];
@@ -1006,7 +1025,7 @@ async function fetchAgentsViaSDK(s: TeneoSDK): Promise<any[]> {
   const limit = 50;
   let result;
   do {
-    result = await s.listAvailableAgents(room.id, { limit, offset });
+    result = await s.listAvailableAgents(room.id, { limit, offset, includeDetails });
     available.push(...result.agents);
     offset += limit;
   } while (result.hasMore);
@@ -1014,91 +1033,43 @@ async function fetchAgentsViaSDK(s: TeneoSDK): Promise<any[]> {
   return [...roomAgents, ...available];
 }
 
-// ─── Live Agent Details (workaround SDK bug: agent_id must be in data wrapper) ─
+// ─── Live Agent Details ─────────────────────────────────────────────────────
 
 async function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-async function getAgentDetailsLive(s: TeneoSDK, agentId: string, timeoutMs = 10000): Promise<any | null> {
+async function getAgentDetailsLive(s: TeneoSDK, agentId: string): Promise<any | null> {
   try {
-    const wsClient = (s as any).wsClient;
-    if (!wsClient?.isConnected) return null;
-
-    return await new Promise<any>((resolve) => {
-      const timeout = setTimeout(() => {
-        wsClient.off("message:received", handler);
-        resolve(null);
-      }, timeoutMs);
-      const handler = (msg: any) => {
-        if (msg.type === "agent_details_response" && msg.data?.agent) {
-          const agent = msg.data.agent;
-          if (agent.agent_id === agentId) {
-            clearTimeout(timeout);
-            wsClient.off("message:received", handler);
-            resolve(agent);
-          }
-        }
-      };
-      wsClient.on("message:received", handler);
-      wsClient.sendMessage({ type: "get_agent_details" as any, data: { agent_id: agentId } });
-    });
+    return await s.getAgentDetails(agentId);
   } catch {
     return null;
   }
 }
 
-// Bulk enrichment: fire all requests at once, collect responses with a shared listener
+// Bulk enrichment: fetch details for all agents via SDK with staggered requests
 async function enrichAgentsWithDetails(s: TeneoSDK, agents: any[]): Promise<any[]> {
-  const wsClient = (s as any).wsClient;
-  if (!wsClient?.isConnected || agents.length === 0) return agents;
+  if (agents.length === 0) return agents;
 
-  const pending = new Map<string, any>(); // agentId -> original agent
-  const results = new Map<string, any>(); // agentId -> enriched agent
-  for (const agent of agents) {
-    pending.set(agent.agent_id, agent);
+  // Fire all requests with 200ms stagger to respect rate limits (10/sec, burst 20),
+  // but let them resolve concurrently via the SDK's built-in request deduplication
+  const promises = agents.map((agent, i) =>
+    sleep(i * 200).then(() =>
+      s.getAgentDetails(agent.agent_id)
+        .then(details => ({ agentId: agent.agent_id, details }))
+        .catch(() => ({ agentId: agent.agent_id, details: null }))
+    )
+  );
+
+  const settled = await Promise.all(promises);
+  const results = new Map<string, any>();
+  for (const { agentId, details } of settled) {
+    if (details) {
+      results.set(agentId, { ...normalizeAgent(details), _source: "live" });
+    }
   }
 
-  return new Promise<any[]>((resolve) => {
-    // Global timeout: stagger (200ms * count) + 10s for responses, max 60s
-    const totalTimeout = Math.min(agents.length * 200 + 10000, 60000);
-    const timer = setTimeout(() => {
-      wsClient.off("message:received", handler);
-      finalize();
-    }, totalTimeout);
-
-    const handler = (msg: any) => {
-      if (msg.type === "agent_details_response" && msg.data?.agent) {
-        const agent = msg.data.agent;
-        if (pending.has(agent.agent_id)) {
-          results.set(agent.agent_id, { ...normalizeAgent(agent), _source: "live" });
-          pending.delete(agent.agent_id);
-          if (pending.size === 0) {
-            clearTimeout(timer);
-            wsClient.off("message:received", handler);
-            finalize();
-          }
-        }
-      }
-    };
-
-    function finalize() {
-      // Merge: live results + fallback to original for any that didn't respond
-      const merged = agents.map(a =>
-        results.get(a.agent_id) || { ...a, _source: "cached" }
-      );
-      resolve(merged);
-    }
-
-    wsClient.on("message:received", handler);
-
-    // Fire requests with 200ms stagger to stay within rate limit (10/sec, burst 20)
-    (async () => {
-      for (const agent of agents) {
-        wsClient.sendMessage({ type: "get_agent_details" as any, data: { agent_id: agent.agent_id } })
-          .catch(() => {});
-        await sleep(200);
-      }
-    })();
-  });
+  return agents.map(a =>
+    results.get(a.agent_id) || { ...a, _source: "cached" }
+  );
 }
 
 // ─── Command Handlers ────────────────────────────────────────────────────────
@@ -1106,9 +1077,8 @@ async function enrichAgentsWithDetails(s: TeneoSDK, agents: any[]): Promise<any[
 const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   // Discovery (via SDK WebSocket — no REST)
   "discover": async (s) => {
-    const rawAgents = await fetchAgentsViaSDK(s);
-    const normalized = rawAgents.map(normalizeAgent);
-    const enriched = await enrichAgentsWithDetails(s, normalized);
+    const rawAgents = await fetchAgentsViaSDK(s, true);
+    const enriched = rawAgents.map(normalizeAgent);
     const onlineAgents = enriched.filter(a => a.is_online);
     const commandIndex: any[] = [];
     for (const agent of onlineAgents) {
@@ -1146,7 +1116,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   },
 
   "list-agents": async (s, args) => {
-    let agents = (await fetchAgentsViaSDK(s)).map(normalizeAgent);
+    let agents = (await fetchAgentsViaSDK(s, true)).map(normalizeAgent);
 
     // Add locally installed skill agents that are missing from the network (offline/disappeared)
     try {
@@ -1189,9 +1159,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
     if (args?.online) agents = agents.filter(a => a.is_online);
     if (args?.free) agents = agents.filter(a => a.commands.some((c: any) => c.is_free));
 
-    // Enrich with live details (commands, pricing)
-    const enriched = await enrichAgentsWithDetails(s, agents);
-    return { count: enriched.length, agents: enriched };
+    return { count: agents.length, agents };
   },
 
   "info": async (s, { agentId }) => {
@@ -1505,13 +1473,12 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
   // Agent deployment — filter agents by creator wallet
   "my-agents": async (s, { walletAddress }) => {
-    const rawAgents = await fetchAgentsViaSDK(s);
+    const rawAgents = await fetchAgentsViaSDK(s, true);
     const all = rawAgents.map(normalizeAgent);
-    const enriched = await enrichAgentsWithDetails(s, all);
     // Filter by creator wallet if available in agent metadata
     const owned = walletAddress
-      ? enriched.filter((a: any) => a.creator_wallet?.toLowerCase() === walletAddress.toLowerCase() || a.owner?.toLowerCase() === walletAddress.toLowerCase())
-      : enriched;
+      ? all.filter((a: any) => a.owner?.toLowerCase() === walletAddress.toLowerCase() || a.creator_wallet?.toLowerCase() === walletAddress.toLowerCase())
+      : all;
     return { count: owned.length, agents: owned, wallet: walletAddress };
   },
 
