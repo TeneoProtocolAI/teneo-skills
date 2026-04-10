@@ -1013,24 +1013,11 @@ function normalizeAgent(a: any) {
   };
 }
 
-async function fetchAgentsViaSDK(s: TeneoSDK, includeDetails = false): Promise<any[]> {
-  const rooms = await liveRooms(s);
-  if (rooms.length === 0) return [];
-  const room = rooms[0];
-
-  // Get agents in room + available to add
-  const roomAgents = await s.listRoomAgents(room.id);
-  const available: any[] = [];
-  let offset = 0;
-  const limit = 50;
-  let result;
-  do {
-    result = await s.listAvailableAgents(room.id, { limit, offset, includeDetails });
-    available.push(...result.agents);
-    offset += limit;
-  } while (result.hasMore);
-
-  return [...roomAgents, ...available];
+async function fetchAgentsViaSDK(s: TeneoSDK, _includeDetails = false): Promise<any[]> {
+  // Use the native SDK AgentRegistry (sdk.getAgents()) instead of the room-based
+  // listRoomAgents/listAvailableAgents workaround. The registry is populated on
+  // connect and kept current via server push events (agent:list, agent_status_update).
+  return [...s.getAgents()];
 }
 
 // ─── Live Agent Details ─────────────────────────────────────────────────────
@@ -1196,7 +1183,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   },
 
   "room-agents": async (s, { roomId }) => {
-    const agents = await s.listRoomAgents(roomId);
+    const agents = await s.listRoomAgents(roomId, false);
     return { roomId, count: agents.length, agents: agents.map((a: any) => ({ id: a.agent_id, name: a.agent_name, status: a.status })) };
   },
 
@@ -1269,7 +1256,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
     // Autosummon: check if agent is in room, try existing rooms first, create new as last resort
     try {
-      const roomAgents = await s.listRoomAgents(room);
+      const roomAgents = await s.listRoomAgents(room, false);
       const agentInRoom = roomAgents.some((a: any) => a.agent_id === agent);
       if (!agentInRoom) {
         // Agent not in requested room — add it, swap if full
@@ -1467,7 +1454,8 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   },
 
   "room-available-agents": async (s, { roomId }) => {
-    const agents = await (s as any).listAvailableAgents(roomId);
+    // useCache=false: agents go online/offline often, always fetch fresh
+    const agents = await (s as any).listAvailableAgents(roomId, false);
     return { roomId, count: agents.length, agents: agents.map((a: any) => ({ id: a.agent_id || a.id, name: a.agent_name || a.name, status: a.is_online ? "online" : "offline" })) };
   },
 

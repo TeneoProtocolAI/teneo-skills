@@ -119428,21 +119428,8 @@ function normalizeAgent(a) {
     })
   };
 }
-async function fetchAgentsViaSDK(s2, includeDetails = false) {
-  const rooms = await liveRooms(s2);
-  if (rooms.length === 0) return [];
-  const room = rooms[0];
-  const roomAgents = await s2.listRoomAgents(room.id);
-  const available = [];
-  let offset = 0;
-  const limit = 50;
-  let result;
-  do {
-    result = await s2.listAvailableAgents(room.id, { limit, offset, includeDetails });
-    available.push(...result.agents);
-    offset += limit;
-  } while (result.hasMore);
-  return [...roomAgents, ...available];
+async function fetchAgentsViaSDK(s2, _includeDetails = false) {
+  return [...s2.getAgents()];
 }
 async function sleep(ms) {
   return new Promise((r2) => setTimeout(r2, ms));
@@ -119603,7 +119590,7 @@ var handlers = {
     return { count: rooms.length, rooms: rooms.map((r2) => ({ id: r2.id, name: r2.name, is_public: r2.is_public, is_owner: r2.is_owner, description: r2.description })) };
   },
   "room-agents": async (s2, { roomId }) => {
-    const agents = await s2.listRoomAgents(roomId);
+    const agents = await s2.listRoomAgents(roomId, false);
     return { roomId, count: agents.length, agents: agents.map((a) => ({ id: a.agent_id, name: a.agent_name, status: a.status })) };
   },
   "create-room": async (s2, { name, description, isPublic }) => {
@@ -119663,7 +119650,7 @@ var handlers = {
       });
     }
     try {
-      const roomAgents = await s2.listRoomAgents(room);
+      const roomAgents = await s2.listRoomAgents(room, false);
       const agentInRoom = roomAgents.some((a) => a.agent_id === agent);
       if (!agentInRoom) {
         if (roomAgents.length >= 5) {
@@ -119824,7 +119811,7 @@ var handlers = {
     };
   },
   "room-available-agents": async (s2, { roomId }) => {
-    const agents = await s2.listAvailableAgents(roomId);
+    const agents = await s2.listAvailableAgents(roomId, false);
     return { roomId, count: agents.length, agents: agents.map((a) => ({ id: a.agent_id || a.id, name: a.agent_name || a.name, status: a.is_online ? "online" : "offline" })) };
   },
   // Agent deployment — filter agents by creator wallet
