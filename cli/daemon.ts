@@ -600,10 +600,19 @@ async function runMultiStepTxFlow(
     };
 
     const recordTaskId = (taskId?: string) => {
-      if (!taskId || taskId.startsWith("msg-") || activeTaskId) return;
-      activeTaskId = taskId;
-      taskConfirmedSeen = true;
-      log(`Tracking multi-step task ${taskId} for ${agent}`);
+      if (!taskId || taskId.startsWith("msg-")) return;
+      if (!activeTaskId) {
+        activeTaskId = taskId;
+        taskConfirmedSeen = true;
+        log(`Tracking multi-step task ${taskId} for ${agent}`);
+        return;
+      }
+      // Quote-confirm flows can legitimately roll into a new task ID for follow-up TX steps.
+      if (activeTaskId !== taskId && initialTaskId && activeTaskId === initialTaskId) {
+        activeTaskId = taskId;
+        taskConfirmedSeen = true;
+        log(`Switched multi-step tracking from initial task ${initialTaskId} to follow-up task ${taskId} for ${agent}`);
+      }
     };
 
     const matchesAgent = (value?: string) => !!value && value.toLowerCase() === agentLower;
@@ -613,13 +622,18 @@ async function runMultiStepTxFlow(
 
     const shouldTrackTxEvent = (data: any) => {
       if (matchesTask(data.taskId) || matchesInitialTask(data.taskId)) return true;
-      if (initialTaskId && data.taskId && data.taskId !== initialTaskId) return false;
+      if (initialTaskId && data.taskId && data.taskId !== initialTaskId) {
+        return matchesAgent(data.agentName);
+      }
       return !activeTaskId && matchesAgent(data.agentName);
     };
 
     const shouldTrackAgentResponse = (response: any) => {
       if (matchesTask(response.taskId) || matchesInitialTask(response.taskId)) return true;
       if (isSyntheticTaskId(response.taskId)) {
+        return matchesAgent(response.agentId) || matchesAgent(response.agentName);
+      }
+      if (initialTaskId && response.taskId && response.taskId !== initialTaskId) {
         return matchesAgent(response.agentId) || matchesAgent(response.agentName);
       }
       if (activeTaskId) return false;
