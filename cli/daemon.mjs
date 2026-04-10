@@ -119429,7 +119429,20 @@ function normalizeAgent(a) {
   };
 }
 async function fetchAgentsViaSDK(s2, _includeDetails = false) {
-  return [...s2.getAgents()];
+  const agents = [...s2.getAgents()];
+  if (agents.length > 0) return agents;
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      s2.off("agent:list", onList);
+      resolve([...s2.getAgents()]);
+    }, 1e4);
+    const onList = () => {
+      clearTimeout(timeout);
+      s2.off("agent:list", onList);
+      resolve([...s2.getAgents()]);
+    };
+    s2.on("agent:list", onList);
+  });
 }
 async function sleep(ms) {
   return new Promise((r2) => setTimeout(r2, ms));

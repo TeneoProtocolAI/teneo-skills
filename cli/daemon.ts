@@ -1017,7 +1017,23 @@ async function fetchAgentsViaSDK(s: TeneoSDK, _includeDetails = false): Promise<
   // Use the native SDK AgentRegistry (sdk.getAgents()) instead of the room-based
   // listRoomAgents/listAvailableAgents workaround. The registry is populated on
   // connect and kept current via server push events (agent:list, agent_status_update).
-  return [...s.getAgents()];
+  const agents = [...s.getAgents()];
+  if (agents.length > 0) return agents;
+
+  // Registry empty — the initial agent list may not have arrived yet (race on
+  // first connect). Wait for the agent:list event with a short timeout.
+  return new Promise<any[]>((resolve) => {
+    const timeout = setTimeout(() => {
+      s.off("agent:list", onList);
+      resolve([...s.getAgents()]);
+    }, 10_000);
+    const onList = () => {
+      clearTimeout(timeout);
+      s.off("agent:list", onList);
+      resolve([...s.getAgents()]);
+    };
+    s.on("agent:list", onList);
+  });
 }
 
 // ─── Live Agent Details ─────────────────────────────────────────────────────
