@@ -1,6 +1,6 @@
 ---
 name: coinmarketcap-agent-teneo
-version: 2.0.62
+version: 2.0.63
 description: "AI agent for CoinMarketCap Agent via Teneo Protocol. Use this skill when the user needs CoinMarketCap Agent via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

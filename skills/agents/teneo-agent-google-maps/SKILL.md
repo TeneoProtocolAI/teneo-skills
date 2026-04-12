@@ -1,6 +1,6 @@
 ---
 name: google-maps-teneo
-version: 2.0.62
+version: 2.0.63
 description: "The Google Maps Agent transforms geographical and local business data into structured, actionable intelligence. Use this skill when the user needs Google maps via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 featured: true
 ---
