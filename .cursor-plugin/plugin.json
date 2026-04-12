@@ -1,7 +1,7 @@
 {
   "name": "teneo-skills",
   "description": "Teneo Protocol skills for AI coding assistants — connect to decentralized AI agents for web scraping, crypto data, analytics, and social media automation with automatic USDC payments",
-  "version": "2.0.61",
+  "version": "2.0.62",
   "author": {
     "name": "Teneo Protocol"
   },
@@ -34,13 +34,13 @@
     "./skills/agents/teneo-agent-layerzero",
     "./skills/agents/teneo-agent-linkedin",
     "./skills/agents/teneo-agent-messari-btc-eth-tracker",
-    "./skills/agents/teneo-agent-predexon-prediction-market-agent-1-5",
-    "./skills/agents/teneo-agent-predexon-prediction-market-trading-1-5",
-    "./skills/agents/teneo-agent-squid-router",
+    "./skills/agents/teneo-agent-x-platform-agent",
     "./skills/agents/teneo-agent-uniswap-monitor",
     "./skills/agents/teneo-agent-vc-attention",
-    "./skills/agents/teneo-agent-x-platform-agent",
     "./skills/agents/teneo-agent-youtube",
-    "./skills/agents/teneo-agent-aave-v3-liquidation-watcher"
+    "./skills/agents/teneo-agent-squid-router",
+    "./skills/agents/teneo-agent-aave-v3-liquidation-watcher",
+    "./skills/agents/teneo-agent-predexon-prediction-market-agent-1-5",
+    "./skills/agents/teneo-agent-predexon-prediction-market-trading-1-5"
   ]
 }
