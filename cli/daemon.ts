@@ -40,7 +40,7 @@ const IDLE_TIMEOUT_MS = (() => {
   const parsed = Number(process.env.TENEO_DAEMON_IDLE_TIMEOUT_MS);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_IDLE_TIMEOUT_MS;
 })();
-const TX_FOLLOWUP_TIMEOUT_MS = 60_000; // wait up to 60s for follow-up trigger_wallet_tx after a confirmed TX
+const TX_FOLLOWUP_TIMEOUT_MS = 300_000; // wait up to 5min for follow-up trigger_wallet_tx after a confirmed TX
 
 // Tracks the in-flight startup connection so /health can wait for it
 let connectingPromise: Promise<void> | null = null;
@@ -182,17 +182,8 @@ function cacheQuote(cacheKey: string, quote: any): void {
   quoteCacheByTaskId.set(entry.taskId, cacheKey);
 }
 
-function getPendingQuoteSafe(s: TeneoSDK, taskId: string): any | null {
-  try {
-    const getter = (s as any).getPendingQuote;
-    if (typeof getter === "function") return getter.call(s, taskId);
-  } catch {
-    return null;
-  }
-  return null;
-}
 
-function getReusableCachedQuote(s: TeneoSDK, cacheKey: string): any | null {
+function getReusableCachedQuote(cacheKey: string): any | null {
   const cached = quoteCache.get(cacheKey);
   if (!cached) return null;
 
@@ -201,11 +192,9 @@ function getReusableCachedQuote(s: TeneoSDK, cacheKey: string): any | null {
     return null;
   }
 
-  if (!getPendingQuoteSafe(s, cached.taskId)) {
-    invalidateCachedQuoteByKey(cacheKey);
-    return null;
-  }
-
+  // Trust daemon-level TTL. The command handler invalidates the cache via
+  // invalidateCachedQuoteByTaskId when a quote is consumed, so stale quotes
+  // are cleaned up on use rather than on lookup.
   return cached.quote;
 }
 
@@ -467,7 +456,7 @@ function buildSDK(key: string): TeneoSDK {
       asset: CHAIN_TO_USDC.base,
     });
   const config = builder.build();
-  config.messageTimeout = 120000;
+  config.messageTimeout = 300000;
   config.responseFormat = "both";
   config.webhookHeaders = {
     ...(config.webhookHeaders ?? {}),
@@ -668,11 +657,13 @@ async function runMultiStepTxFlow(
       }, delayMs);
     };
 
-    const resetIdleTimer = (label: string) => {
+    const STREAM_IDLE_TIMEOUT_MS = 180_000; // 3 min idle between streaming chunks
+
+    const resetIdleTimer = (label: string, timeoutMs?: number) => {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
         log(`Idle timeout reached after last activity: ${label}`);
-        if (messages.length > 0) {
+        if (messages.length > 0 || streamChunks.length > 0) {
           settle(resolve, {
             ...buildTaskFlowResult("timeout"),
             note: "Flow idle-timed out but some steps completed",
@@ -680,7 +671,7 @@ async function runMultiStepTxFlow(
           return;
         }
         settle(reject, new Error("Multi-step TX flow timed out with no responses"));
-      }, TX_FOLLOWUP_TIMEOUT_MS);
+      }, timeoutMs ?? TX_FOLLOWUP_TIMEOUT_MS);
     };
 
     const flowTimeout = setTimeout(() => {
@@ -771,8 +762,8 @@ async function runMultiStepTxFlow(
         content: data.content || "",
         timestamp: new Date().toISOString(),
       });
-      // Chunks keep the flow alive — reset idle timer
-      resetIdleTimer(`stream chunk ${data.seq}`);
+      // Chunks keep the flow alive — reset with streaming-specific 3 min timeout
+      resetIdleTimer(`stream chunk ${data.seq}`, STREAM_IDLE_TIMEOUT_MS);
     };
 
     const agentStreamEndHandler = (data: any) => {
@@ -881,7 +872,6 @@ function registerTxSigner(sdkInstance: TeneoSDK) {
 
   sdkInstance.on("wallet:tx_requested", async (data: any) => {
     const { taskId, tx, agentName, description, room } = data;
-    const isOptional = data.optional === true;
     log(`TX requested by ${agentName || "agent"}: ${description || "on-chain transaction"}`);
 
     // Auto-sign — sign, broadcast, wait for receipt, confirm
@@ -1153,7 +1143,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
 
   // Room management
   "rooms": async (s) => {
-    const rooms = await liveRooms(s);
+    const rooms = liveRooms(s);
     return { count: rooms.length, rooms: rooms.map((r: any) => ({ id: r.id, name: r.name, is_public: r.is_public, is_owner: r.is_owner, description: r.description })) };
   },
 
@@ -1194,12 +1184,12 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   },
 
   "owned-rooms": async (s) => {
-    const rooms = (await liveRooms(s)).filter((r: any) => r.is_owner);
+    const rooms = liveRooms(s).filter((r: any) => r.is_owner);
     return { count: rooms.length, rooms: rooms.map((r: any) => ({ id: r.id, name: r.name, is_public: r.is_public })) };
   },
 
   "shared-rooms": async (s) => {
-    const rooms = (await liveRooms(s)).filter((r: any) => !r.is_owner);
+    const rooms = liveRooms(s).filter((r: any) => !r.is_owner);
     return { count: rooms.length, rooms: rooms.map((r: any) => ({ id: r.id, name: r.name, is_public: r.is_public })) };
   },
 
@@ -1216,7 +1206,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   // Agent commands (with autosummon — uses sendMessage like the orchestrator)
   // Supports multi-step TX flows: agent sends approval TX, we sign it, agent sends swap TX, we sign it, agent sends final result.
   "command": async (s, { agent, cmd, room, chain, timeout, quoteTaskId }) => {
-    const effectiveTimeout = timeout || 120000;
+    const effectiveTimeout = timeout || 300000;
 
     if (quoteTaskId) {
       invalidateCachedQuoteByTaskId(quoteTaskId);
@@ -1374,7 +1364,7 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
       throw new Error(`Unable to resolve quote chain. Set --chain to a valid network (${formatSupportedPaymentChainsForFlag()}).`);
     }
     const cacheKey = buildQuoteCacheKey(message, room, resolvedChain);
-    const cachedQuote = getReusableCachedQuote(s, cacheKey);
+    const cachedQuote = getReusableCachedQuote(cacheKey);
     if (cachedQuote) {
       log(`Quote cache hit for ${message} on ${resolvedChain}`);
       return cachedQuote;
@@ -1429,8 +1419,15 @@ const handlers: Record<string, (s: TeneoSDK, args: any) => Promise<any>> = {
   },
 
   "room-available-agents": async (s, { roomId }) => {
-    // useCache=false: agents go online/offline often, always fetch fresh
-    const agents = await (s as any).listAvailableAgents(roomId, false);
+    const agents: any[] = [];
+    let offset = 0;
+    const limit = 50;
+    let result;
+    do {
+      result = await s.listAvailableAgents(roomId, { limit, offset });
+      agents.push(...result.agents);
+      offset += limit;
+    } while (result.hasMore);
     return { roomId, count: agents.length, agents: agents.map((a: any) => ({ id: a.agent_id || a.id, name: a.agent_name || a.name, status: a.is_online ? "online" : "offline" })) };
   },
 

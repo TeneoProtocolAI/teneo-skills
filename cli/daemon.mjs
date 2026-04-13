@@ -120503,7 +120503,7 @@ var IDLE_TIMEOUT_MS = (() => {
   const parsed = Number(process.env.TENEO_DAEMON_IDLE_TIMEOUT_MS);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_IDLE_TIMEOUT_MS;
 })();
-var TX_FOLLOWUP_TIMEOUT_MS = 6e4;
+var TX_FOLLOWUP_TIMEOUT_MS = 3e5;
 var connectingPromise = null;
 var CHAIN_TO_CAIP2 = {
   base: "eip155:8453",
@@ -120600,23 +120600,10 @@ function cacheQuote(cacheKey2, quote) {
   quoteCache.set(cacheKey2, entry);
   quoteCacheByTaskId.set(entry.taskId, cacheKey2);
 }
-function getPendingQuoteSafe(s2, taskId) {
-  try {
-    const getter = s2.getPendingQuote;
-    if (typeof getter === "function") return getter.call(s2, taskId);
-  } catch {
-    return null;
-  }
-  return null;
-}
-function getReusableCachedQuote(s2, cacheKey2) {
+function getReusableCachedQuote(cacheKey2) {
   const cached = quoteCache.get(cacheKey2);
   if (!cached) return null;
   if (cached.cachedUntilMs <= Date.now()) {
-    invalidateCachedQuoteByKey(cacheKey2);
-    return null;
-  }
-  if (!getPendingQuoteSafe(s2, cached.taskId)) {
     invalidateCachedQuoteByKey(cacheKey2);
     return null;
   }
@@ -120821,7 +120808,7 @@ function buildSDK(key) {
     asset: CHAIN_TO_USDC.base
   });
   const config = builder.build();
-  config.messageTimeout = 12e4;
+  config.messageTimeout = 3e5;
   config.responseFormat = "both";
   config.webhookHeaders = {
     ...config.webhookHeaders ?? {},
@@ -120975,11 +120962,12 @@ async function runMultiStepTxFlow(s2, {
         });
       }, delayMs);
     };
-    const resetIdleTimer = (label) => {
+    const STREAM_IDLE_TIMEOUT_MS = 18e4;
+    const resetIdleTimer = (label, timeoutMs) => {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
         log(`Idle timeout reached after last activity: ${label}`);
-        if (messages.length > 0) {
+        if (messages.length > 0 || streamChunks.length > 0) {
           settle(resolve2, {
             ...buildTaskFlowResult("timeout"),
             note: "Flow idle-timed out but some steps completed"
@@ -120987,7 +120975,7 @@ async function runMultiStepTxFlow(s2, {
           return;
         }
         settle(reject, new Error("Multi-step TX flow timed out with no responses"));
-      }, TX_FOLLOWUP_TIMEOUT_MS);
+      }, timeoutMs ?? TX_FOLLOWUP_TIMEOUT_MS);
     };
     const flowTimeout = setTimeout(() => {
       clearFinalizeTimer();
@@ -121069,7 +121057,7 @@ async function runMultiStepTxFlow(s2, {
         content: data.content || "",
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       });
-      resetIdleTimer(`stream chunk ${data.seq}`);
+      resetIdleTimer(`stream chunk ${data.seq}`, STREAM_IDLE_TIMEOUT_MS);
     };
     const agentStreamEndHandler = (data) => {
       if (!matchesTask(data.taskId) && !matchesInitialTask(data.taskId) && !(matchesAgent(data.agentId) || matchesAgent(data.agentName))) {
@@ -121153,7 +121141,6 @@ function registerTxSigner(sdkInstance) {
   const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
   sdkInstance.on("wallet:tx_requested", async (data) => {
     const { taskId, tx, agentName, description, room } = data;
-    const isOptional = data.optional === true;
     log(`TX requested by ${agentName || "agent"}: ${description || "on-chain transaction"}`);
     try {
       await signBroadcastAndConfirm(sdkInstance, account, taskId, tx, room);
@@ -121401,7 +121388,7 @@ var handlers = {
   "health": async (s2) => s2.getHealth(),
   // Room management
   "rooms": async (s2) => {
-    const rooms = await liveRooms(s2);
+    const rooms = liveRooms(s2);
     return { count: rooms.length, rooms: rooms.map((r2) => ({ id: r2.id, name: r2.name, is_public: r2.is_public, is_owner: r2.is_owner, description: r2.description })) };
   },
   "room-agents": async (s2, { roomId }) => {
@@ -121435,11 +121422,11 @@ var handlers = {
     return { status: "removed", roomId, agentId };
   },
   "owned-rooms": async (s2) => {
-    const rooms = (await liveRooms(s2)).filter((r2) => r2.is_owner);
+    const rooms = liveRooms(s2).filter((r2) => r2.is_owner);
     return { count: rooms.length, rooms: rooms.map((r2) => ({ id: r2.id, name: r2.name, is_public: r2.is_public })) };
   },
   "shared-rooms": async (s2) => {
-    const rooms = (await liveRooms(s2)).filter((r2) => !r2.is_owner);
+    const rooms = liveRooms(s2).filter((r2) => !r2.is_owner);
     return { count: rooms.length, rooms: rooms.map((r2) => ({ id: r2.id, name: r2.name, is_public: r2.is_public })) };
   },
   "subscribe": async (s2, { roomId }) => {
@@ -121453,7 +121440,7 @@ var handlers = {
   // Agent commands (with autosummon — uses sendMessage like the orchestrator)
   // Supports multi-step TX flows: agent sends approval TX, we sign it, agent sends swap TX, we sign it, agent sends final result.
   "command": async (s2, { agent, cmd, room, chain, timeout, quoteTaskId }) => {
-    const effectiveTimeout = timeout || 12e4;
+    const effectiveTimeout = timeout || 3e5;
     if (quoteTaskId) {
       invalidateCachedQuoteByTaskId(quoteTaskId);
       return await runMultiStepTxFlow(s2, {
@@ -121577,7 +121564,7 @@ var handlers = {
       throw new Error(`Unable to resolve quote chain. Set --chain to a valid network (${formatSupportedPaymentChainsForFlag()}).`);
     }
     const cacheKey2 = buildQuoteCacheKey(message, room, resolvedChain);
-    const cachedQuote = getReusableCachedQuote(s2, cacheKey2);
+    const cachedQuote = getReusableCachedQuote(cacheKey2);
     if (cachedQuote) {
       log(`Quote cache hit for ${message} on ${resolvedChain}`);
       return cachedQuote;
@@ -121626,7 +121613,15 @@ var handlers = {
     };
   },
   "room-available-agents": async (s2, { roomId }) => {
-    const agents = await s2.listAvailableAgents(roomId, false);
+    const agents = [];
+    let offset = 0;
+    const limit = 50;
+    let result;
+    do {
+      result = await s2.listAvailableAgents(roomId, { limit, offset });
+      agents.push(...result.agents);
+      offset += limit;
+    } while (result.hasMore);
     return { roomId, count: agents.length, agents: agents.map((a) => ({ id: a.agent_id || a.id, name: a.agent_name || a.name, status: a.is_online ? "online" : "offline" })) };
   },
   // Agent deployment — filter agents by creator wallet

@@ -13,9 +13,6 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
 ~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
 
-# Tiktok — Extracts video metadata
-~/teneo-skill/teneo command "tiktok" "video <url>" --room <roomId>
-
 # Amazon — Extract product details
 ~/teneo-skill/teneo command "amazon" "product <ASIN> <domain>" --room <roomId>
 
@@ -25,14 +22,17 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # Instagram Agent — Get profile details
 ~/teneo-skill/teneo command "instagram" "profile <username>" --room <roomId>
 
+# Tiktok — Extracts video metadata
+~/teneo-skill/teneo command "tiktok" "video <url>" --room <roomId>
+
+# CoinMarketCap Agent — Returns the top-n cryptocurrencies ranked by market cap (max
+~/teneo-skill/teneo command "coinmarketcap-agent" "top <number>" --room <roomId>
+
 # CryptoQuant Pro 2.10 — Exchange netflow (BTC or ETH): Net movement. Positive = more
 ~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
 
 # Google Search Agent — Performs a Google search for the given query.
 ~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
-
-# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
-~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -66,7 +66,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.63 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.64 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

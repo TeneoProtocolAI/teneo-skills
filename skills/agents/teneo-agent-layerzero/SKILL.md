@@ -1,6 +1,6 @@
 ---
 name: layerzero-teneo
-version: 2.0.63
+version: 2.0.64
 description: "AI agent for LayerZero via Teneo Protocol. Use this skill when the user needs LayerZero via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
