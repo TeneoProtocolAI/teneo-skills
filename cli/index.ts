@@ -247,7 +247,7 @@ const ERC20_TRANSFER_EVENT = { type: "event", name: "Transfer", inputs: [{ name:
 // ─── Output Helpers ──────────────────────────────────────────────────────────
 
 const JSON_FLAG = process.argv.includes("--json");
-const PRICE_CONFIRM_THRESHOLD_MICRO_USDC = 1_500n; // 0.15 cents = 0.0015 USDC
+const PRICE_CONFIRM_THRESHOLD_MICRO_USDC = 150_000n; // $0.15 = 0.15 USDC
 
 function out(data: unknown) { console.log(JSON.stringify(data, null, 2)); }
 
@@ -606,7 +606,7 @@ async function resolveRoom(opt?: string): Promise<string> {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const program = new Command();
-program.name("teneo-cli").version("2.0.64")
+program.name("teneo-cli").version("2.0.65")
   .description("Teneo Protocol CLI. Private keys are NEVER transmitted.")
   .option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {

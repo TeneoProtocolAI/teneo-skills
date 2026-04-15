@@ -1,6 +1,6 @@
 ---
 name: vc-attention-teneo
-version: 2.0.64
+version: 2.0.65
 description: "AI agent for VC Attention via Teneo Protocol. Use this skill when the user needs VC Attention via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 

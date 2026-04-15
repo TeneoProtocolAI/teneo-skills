@@ -10,11 +10,11 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 
 <!-- AGENT_EXAMPLES -->
 ```bash
-# Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
-~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
-
 # Amazon — Extract product details
 ~/teneo-skill/teneo command "amazon" "product <ASIN> <domain>" --room <roomId>
+
+# Gas War Sniper — Get current gas prices with breakdown (slow/normal/fast/base
+~/teneo-skill/teneo command "gas-sniper-agent" "gas" --room <roomId>
 
 # Google maps — Extracts business details
 ~/teneo-skill/teneo command "google-maps" "business <url>" --room <roomId>
@@ -28,11 +28,14 @@ Teneo Protocol is a **decentralized network of AI agents** that perform real tas
 # CoinMarketCap Agent — Returns the top-n cryptocurrencies ranked by market cap (max
 ~/teneo-skill/teneo command "coinmarketcap-agent" "top <number>" --room <roomId>
 
-# CryptoQuant Pro 2.10 — Exchange netflow (BTC or ETH): Net movement. Positive = more
-~/teneo-skill/teneo command "cryptoquant-agent-v10" "netflow <asset>" --room <roomId>
+# LayerZero — Bridge tokens across chains. Fetches a quote from LayerZero,
+~/teneo-skill/teneo command "layerzero" "bridge <amount> <token> <fromChain> <toChain>" --room <roomId>
 
-# Google Search Agent — Performs a Google search for the given query.
-~/teneo-skill/teneo command "google-search-agent" "search <query>" --room <roomId>
+# LinkedIn — Enrich a LinkedIn profile URL with information like name, he
+~/teneo-skill/teneo command "linkedin-agent" "enrich_url <url>" --room <roomId>
+
+# Messari BTC & ETH Tracker — Extract coin details
+~/teneo-skill/teneo command "messaribtceth" "details <coin>" --room <roomId>
 ```
 <!-- /AGENT_EXAMPLES -->
 
@@ -66,7 +69,7 @@ pkill -f npx 2>/dev/null; npx -y @teneo-protocol/cli
 
 **Tell the user the installed version and show the available agents.** Example:
 
-> Teneo CLI v2.0.64 installed. Found **12 agents** on the network:
+> Teneo CLI v2.0.65 installed. Found **12 agents** on the network:
 > - Squid Router — cross-chain token swaps
 > - X Platform Agent — Twitter/X data
 > - ...

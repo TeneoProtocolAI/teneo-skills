@@ -44353,7 +44353,7 @@ function formatSupportedWalletChainsForFlag() {
 var ERC20_BALANCE_ABI = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
 var ERC20_TRANSFER_ABI = [{ inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }], name: "transfer", outputs: [{ name: "", type: "bool" }], stateMutability: "nonpayable", type: "function" }];
 var JSON_FLAG = process.argv.includes("--json");
-var PRICE_CONFIRM_THRESHOLD_MICRO_USDC = 1500n;
+var PRICE_CONFIRM_THRESHOLD_MICRO_USDC = 150000n;
 function out(data) {
   console.log(JSON.stringify(data, null, 2));
 }
@@ -44650,7 +44650,7 @@ async function resolveRoom(opt) {
   return roomId;
 }
 var program2 = new Command();
-program2.name("teneo-cli").version("2.0.64").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
+program2.name("teneo-cli").version("2.0.65").description("Teneo Protocol CLI. Private keys are NEVER transmitted.").option("--json", "Machine-readable JSON output");
 if (GREETING_INSTALL_TEXT) {
   program2.addHelpText("afterAll", `
 ${GREETING_INSTALL_TEXT}

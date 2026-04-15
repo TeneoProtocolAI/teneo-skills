@@ -1,6 +1,6 @@
 ---
 name: predexon-prediction-market-agent-1-5-teneo
-version: 2.0.64
+version: 2.0.65
 description: "AI agent for Predexon Prediction Market Agent 1.5 via Teneo Protocol. Use this skill when the user needs Predexon Prediction Market Agent 1.5 via the bundled Teneo CLI and you need the live commands, arguments, or pricing before execution."
 ---
 
